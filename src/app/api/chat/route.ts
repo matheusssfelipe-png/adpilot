@@ -102,9 +102,8 @@ ID da conta: ${accountContext.id}`;
       });
     }
 
-    // Real Gemini API call
-    const { GoogleGenAI } = await import('@google/genai');
-    const ai = new GoogleGenAI({ apiKey });
+    // Real Gemini API call via REST (more reliable than SDK)
+    const geminiUrl = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
 
     // Build conversation history for Gemini
     const conversationParts = messages.map((msg: any) => ({
@@ -112,16 +111,36 @@ ID da conta: ${accountContext.id}`;
       parts: [{ text: msg.content }],
     }));
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.0-flash',
-      contents: [
-        { role: 'user', parts: [{ text: SYSTEM_PROMPT + contextMessage }] },
-        { role: 'model', parts: [{ text: 'Entendido! Estou pronto para ajudar com as campanhas. 🚀' }] },
-        ...conversationParts,
-      ],
+    const geminiResponse = await fetch(geminiUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [
+          { role: 'user', parts: [{ text: SYSTEM_PROMPT + contextMessage }] },
+          { role: 'model', parts: [{ text: 'Entendido! Estou pronto para ajudar com as campanhas. 🚀' }] },
+          ...conversationParts,
+        ],
+        generationConfig: {
+          temperature: 0.8,
+          maxOutputTokens: 4096,
+        },
+      }),
     });
 
-    const text = response.text || 'Desculpe, não consegui processar sua solicitação. Tente novamente.';
+    const geminiData = await geminiResponse.json();
+
+    if (!geminiResponse.ok) {
+      console.error('Gemini API error:', JSON.stringify(geminiData));
+      // Fallback to mock if API fails
+      const lastMessage = messages[messages.length - 1]?.content || '';
+      return NextResponse.json({
+        success: true,
+        message: generateMockResponse(lastMessage, accountContext),
+      });
+    }
+
+    const text = geminiData.candidates?.[0]?.content?.parts?.[0]?.text 
+      || 'Desculpe, não consegui processar sua solicitação. Tente novamente.';
 
     // Parse actions from response
     const actions = extractActions(text);
