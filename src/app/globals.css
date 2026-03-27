@@ -779,6 +779,15 @@ tr:hover td { background: var(--bg-glass); }
   .page-content { padding: var(--space-lg); }
 }
 
+/* Desktop only / Mobile only toggle - MUST be before media queries */
+.desktop-only {
+  display: block;
+}
+
+.mobile-only {
+  display: none;
+}
+
 /* Mobile */
 @media (max-width: 768px) {
   /* Sidebar becomes slide-out drawer */
@@ -1074,10 +1083,7 @@ tr:hover td { background: var(--bg-glass); }
   }
 }
 
-/* Desktop only / Mobile only toggle */
-.mobile-only {
-  display: none !important;
-}
+
 
 /* Small phones */
 @media (max-width: 380px) {
