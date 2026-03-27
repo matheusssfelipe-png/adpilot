@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import Header from '@/components/layout/Header';
 import { mockCampaigns, Campaign, CampaignStatus, Platform } from '@/lib/mock-data';
-import { FiPlay, FiPause, FiEdit2, FiPlus, FiFilter, FiSearch, FiMoreVertical, FiX } from 'react-icons/fi';
+import { FiPlay, FiPause, FiEdit2, FiPlus, FiSearch, FiX } from 'react-icons/fi';
 
 const statusLabels: Record<CampaignStatus, string> = {
   ACTIVE: 'Ativa',
@@ -75,8 +75,8 @@ export default function CampaignsPage() {
           </button>
         </div>
 
-        {/* Campaigns Table */}
-        <div className="table-container">
+        {/* Desktop: Table */}
+        <div className="table-container desktop-only">
           <table>
             <thead>
               <tr>
@@ -142,6 +142,68 @@ export default function CampaignsPage() {
               ))}
             </tbody>
           </table>
+        </div>
+
+        {/* Mobile: Campaign Cards */}
+        <div className="mobile-only">
+          {filtered.map(c => (
+            <div key={c.id} className="mobile-campaign-card">
+              <div className="mobile-campaign-card-header">
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div className="mobile-campaign-card-name">{c.name}</div>
+                  <div className="mobile-campaign-card-objective">{c.objective}</div>
+                </div>
+                <div className="mobile-campaign-card-badges">
+                  <span className={`badge ${statusClass[c.status]}`}>
+                    <span className="badge-dot" />
+                    {statusLabels[c.status]}
+                  </span>
+                  <span className={`badge ${c.platform === 'meta' ? 'badge-meta' : 'badge-google'}`}>
+                    {c.platform === 'meta' ? 'Meta' : 'Google'}
+                  </span>
+                </div>
+              </div>
+              <div className="mobile-campaign-card-metrics">
+                <div className="mobile-metric">
+                  <div className="mobile-metric-label">Gasto</div>
+                  <div className="mobile-metric-value">R$ {c.spend.toLocaleString('pt-BR')}</div>
+                </div>
+                <div className="mobile-metric">
+                  <div className="mobile-metric-label">CTR</div>
+                  <div className="mobile-metric-value">{c.ctr}%</div>
+                </div>
+                <div className="mobile-metric">
+                  <div className="mobile-metric-label">ROAS</div>
+                  <div className="mobile-metric-value" style={{
+                    color: c.roas >= 3 ? 'var(--success)' : c.roas >= 2 ? 'var(--warning)' : 'var(--danger)'
+                  }}>{c.roas > 0 ? `${c.roas}x` : '—'}</div>
+                </div>
+                <div className="mobile-metric">
+                  <div className="mobile-metric-label">CPC</div>
+                  <div className="mobile-metric-value">R$ {c.cpc.toFixed(2)}</div>
+                </div>
+                <div className="mobile-metric">
+                  <div className="mobile-metric-label">Cliques</div>
+                  <div className="mobile-metric-value">{c.clicks.toLocaleString('pt-BR')}</div>
+                </div>
+                <div className="mobile-metric">
+                  <div className="mobile-metric-label">Conv.</div>
+                  <div className="mobile-metric-value">{c.conversions.toLocaleString('pt-BR')}</div>
+                </div>
+              </div>
+              <div className="mobile-campaign-card-actions">
+                <button
+                  className={`btn btn-sm ${c.status === 'ACTIVE' ? 'btn-danger' : 'btn-success'}`}
+                  onClick={() => toggleStatus(c.id)}
+                >
+                  {c.status === 'ACTIVE' ? <><FiPause size={12} /> Pausar</> : <><FiPlay size={12} /> Ativar</>}
+                </button>
+                <button className="btn btn-sm btn-secondary">
+                  <FiEdit2 size={12} /> Editar
+                </button>
+              </div>
+            </div>
+          ))}
         </div>
 
         {filtered.length === 0 && (

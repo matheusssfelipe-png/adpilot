@@ -801,9 +801,11 @@ tr:hover td { background: var(--bg-glass); }
     display: flex;
   }
 
-  /* Main content takes full width */
+  /* Main content - PREVENT horizontal overflow */
   .main-content {
     margin-left: 0;
+    overflow-x: hidden;
+    max-width: 100vw;
   }
 
   /* Header adjustments */
@@ -821,77 +823,179 @@ tr:hover td { background: var(--bg-glass); }
   }
 
   .header-actions {
-    gap: var(--space-sm);
+    gap: var(--space-xs);
   }
 
-  /* Page content */
+  .header-actions .btn-icon {
+    width: 34px;
+    height: 34px;
+    padding: 6px;
+  }
+
+  /* Page content - no overflow */
   .page-content {
     padding: var(--space-md);
+    overflow-x: hidden;
+    max-width: 100vw;
+    box-sizing: border-box;
   }
 
   /* Grids stack */
   .grid-2,
   .grid-3 {
     grid-template-columns: 1fr;
+    gap: var(--space-md);
   }
 
-  /* KPI grid - 2 columns on mobile */
+  /* KPI grid - 2 columns forced */
   .kpi-grid {
-    grid-template-columns: repeat(2, 1fr);
+    display: grid;
+    grid-template-columns: 1fr 1fr;
     gap: var(--space-sm);
   }
 
   .kpi-card {
-    padding: var(--space-md);
+    padding: var(--space-sm) var(--space-md);
   }
 
   .kpi-card-value {
-    font-size: 20px;
+    font-size: 18px;
   }
 
   .kpi-card-icon {
-    width: 28px;
-    height: 28px;
-    font-size: 14px;
+    width: 24px;
+    height: 24px;
+    font-size: 12px;
+    border-radius: 6px;
   }
 
   .kpi-card-label {
     font-size: 11px;
   }
 
-  /* Tables become scrollable */
-  .table-container {
-    border-radius: var(--radius-md);
+  .kpi-card-header {
+    margin-bottom: var(--space-sm);
   }
 
-  td, th {
-    padding: var(--space-sm) var(--space-md);
-    font-size: 12px;
-    white-space: nowrap;
+  .kpi-card-change {
+    font-size: 11px;
+    padding: 1px 6px;
   }
 
-  /* Chart cards */
+  /* Charts - contain within screen */
   .chart-card {
-    padding: var(--space-md);
+    padding: var(--space-sm) var(--space-md);
+    overflow: hidden;
+  }
+
+  .chart-card-header {
+    margin-bottom: var(--space-sm);
   }
 
   .chart-card-title {
     font-size: 14px;
   }
 
-  /* Tabs become scrollable */
+  /* Hide desktop table on mobile, show mobile cards */
+  .desktop-only {
+    display: none !important;
+  }
+
+  .mobile-only {
+    display: block !important;
+  }
+
+  /* Mobile Campaign Cards */
+  .mobile-campaign-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: var(--space-md);
+    margin-bottom: var(--space-sm);
+  }
+
+  .mobile-campaign-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: var(--space-sm);
+  }
+
+  .mobile-campaign-card-name {
+    font-weight: 600;
+    font-size: 14px;
+    line-height: 1.3;
+    flex: 1;
+    margin-right: var(--space-sm);
+  }
+
+  .mobile-campaign-card-objective {
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-top: 2px;
+  }
+
+  .mobile-campaign-card-badges {
+    display: flex;
+    gap: var(--space-xs);
+    flex-shrink: 0;
+  }
+
+  .mobile-campaign-card-metrics {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: var(--space-sm);
+    padding: var(--space-sm) 0;
+    border-top: 1px solid var(--border-color);
+    border-bottom: 1px solid var(--border-color);
+    margin: var(--space-sm) 0;
+  }
+
+  .mobile-metric {
+    text-align: center;
+  }
+
+  .mobile-metric-label {
+    font-size: 10px;
+    color: var(--text-tertiary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 2px;
+  }
+
+  .mobile-metric-value {
+    font-size: 14px;
+    font-weight: 700;
+  }
+
+  .mobile-campaign-card-actions {
+    display: flex;
+    gap: var(--space-sm);
+    margin-top: var(--space-sm);
+  }
+
+  .mobile-campaign-card-actions .btn {
+    flex: 1;
+    justify-content: center;
+    font-size: 12px;
+  }
+
+  /* Tabs become proper mobile tabs */
   .tabs {
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
     scrollbar-width: none;
+    width: 100%;
   }
 
   .tabs::-webkit-scrollbar { display: none; }
 
   .tab {
-    padding: 6px var(--space-sm);
+    padding: 6px var(--space-md);
     font-size: 12px;
     white-space: nowrap;
+    flex: 1;
+    text-align: center;
   }
 
   /* Cards */
@@ -902,7 +1006,7 @@ tr:hover td { background: var(--bg-glass); }
   /* Buttons */
   .btn {
     font-size: 13px;
-    padding: 6px 12px;
+    padding: 8px 14px;
   }
 
   .btn-lg {
@@ -911,6 +1015,13 @@ tr:hover td { background: var(--bg-glass); }
   }
 
   /* Sections */
+  .section-header {
+    flex-direction: column;
+    gap: var(--space-sm);
+    align-items: flex-start;
+    margin-bottom: var(--space-md);
+  }
+
   .section-title { font-size: 16px; }
 
   /* Modals go full screen on mobile */
@@ -952,8 +1063,8 @@ tr:hover td { background: var(--bg-glass); }
   }
 
   .input {
-    padding: 8px 12px;
-    font-size: 14px;
+    padding: 10px 12px;
+    font-size: 16px; /* prevents iOS zoom on focus */
   }
 
   /* Login */
@@ -963,14 +1074,23 @@ tr:hover td { background: var(--bg-glass); }
   }
 }
 
+/* Desktop only / Mobile only toggle */
+.mobile-only {
+  display: none !important;
+}
+
 /* Small phones */
 @media (max-width: 380px) {
   .kpi-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: 1fr 1fr;
   }
 
   .kpi-card-value {
-    font-size: 18px;
+    font-size: 16px;
+  }
+
+  .mobile-campaign-card-metrics {
+    grid-template-columns: repeat(2, 1fr);
   }
 
   .creative-grid {
