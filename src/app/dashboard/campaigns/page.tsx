@@ -1,47 +1,61 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import Header from '@/components/layout/Header';
 import { mockCampaigns, Campaign, CampaignStatus, Platform } from '@/lib/mock-data';
 import { useAdAccount } from '@/lib/AdAccountContext';
-import { FiPlay, FiPause, FiEdit2, FiPlus, FiSearch, FiX } from 'react-icons/fi';
+import { useRealCampaigns } from '@/lib/useRealCampaigns';
+import { FiPlay, FiPause, FiEdit2, FiPlus, FiSearch, FiX, FiWifi, FiRefreshCw } from 'react-icons/fi';
 
-const statusLabels: Record<CampaignStatus, string> = {
+const statusLabels: Record<string, string> = {
   ACTIVE: 'Ativa',
   PAUSED: 'Pausada',
   DRAFT: 'Rascunho',
   ERROR: 'Erro',
+  DELETED: 'Excluída',
+  ARCHIVED: 'Arquivada',
 };
 
-const statusClass: Record<CampaignStatus, string> = {
+const statusClass: Record<string, string> = {
   ACTIVE: 'badge-active',
   PAUSED: 'badge-paused',
   DRAFT: 'badge-draft',
   ERROR: 'badge-error',
+  DELETED: 'badge-draft',
+  ARCHIVED: 'badge-draft',
 };
 
 export default function CampaignsPage() {
   const { selectedAccount } = useAdAccount();
+  const { campaigns: realCampaigns, loading, isRealData, refetch } = useRealCampaigns();
   
-  // Filter by selected account first
-  const accountCampaigns = useMemo(
-    () => selectedAccount
+  // Build unified campaign list
+  const allCampaigns = useMemo(() => {
+    if (isRealData && realCampaigns.length > 0) {
+      return realCampaigns.map(c => ({
+        ...c,
+        status: c.status as any,
+        platform: c.platform as 'meta' | 'google',
+        startDate: c.startDate || new Date().toISOString(),
+        endDate: c.stopDate || new Date().toISOString(),
+      }));
+    }
+    return selectedAccount
       ? mockCampaigns.filter(c => c.accountId === selectedAccount.id)
-      : mockCampaigns,
-    [selectedAccount]
-  );
+      : mockCampaigns;
+  }, [selectedAccount, realCampaigns, isRealData]);
 
-  const [campaigns, setCampaigns] = useState<Campaign[]>(mockCampaigns);
+  const [campaigns, setCampaigns] = useState<any[]>([]);
   const [filterPlatform, setFilterPlatform] = useState<'all' | Platform>('all');
-  const [filterStatus, setFilterStatus] = useState<'all' | CampaignStatus>('all');
+  const [filterStatus, setFilterStatus] = useState<'all' | string>('all');
   const [search, setSearch] = useState('');
   const [showCreateModal, setShowCreateModal] = useState(false);
 
-  const currentCampaigns = campaigns.filter(c => 
-    selectedAccount ? c.accountId === selectedAccount.id : true
-  );
+  useEffect(() => {
+    setCampaigns(allCampaigns);
+  }, [allCampaigns]);
 
-  const filtered = currentCampaigns.filter(c => {
+  const filtered = campaigns.filter(c => {
     if (filterPlatform !== 'all' && c.platform !== filterPlatform) return false;
     if (filterStatus !== 'all' && c.status !== filterStatus) return false;
     if (search && !c.name.toLowerCase().includes(search.toLowerCase())) return false;

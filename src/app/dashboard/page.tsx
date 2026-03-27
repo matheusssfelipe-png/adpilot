@@ -6,7 +6,8 @@ import MetricsConfigPanel from '@/components/MetricsConfigPanel';
 import { mockCampaigns } from '@/lib/mock-data';
 import { ALL_METRICS, DEFAULT_DASHBOARD_METRICS, PERIOD_OPTIONS, calcTotals } from '@/lib/metrics-config';
 import { useAdAccount } from '@/lib/AdAccountContext';
-import { FiArrowUp, FiArrowDown } from 'react-icons/fi';
+import { useRealCampaigns } from '@/lib/useRealCampaigns';
+import { FiArrowUp, FiArrowDown, FiRefreshCw, FiWifi } from 'react-icons/fi';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
 
 const CustomTooltip = ({ active, payload, label }: any) => {
@@ -39,16 +40,38 @@ function generateChartData(accountId: string) {
 
 export default function DashboardPage() {
   const { selectedAccount } = useAdAccount();
+  const { campaigns: realCampaigns, loading, isRealData, refetch } = useRealCampaigns();
   const [selectedMetrics, setSelectedMetrics] = useState<string[]>(DEFAULT_DASHBOARD_METRICS);
   const [selectedPeriod, setSelectedPeriod] = useState('30d');
 
-  // Filter campaigns by selected account
-  const accountCampaigns = useMemo(
-    () => selectedAccount
+  // Use real campaigns if available, otherwise mock
+  const accountCampaigns = useMemo(() => {
+    if (isRealData && realCampaigns.length > 0) {
+      // Convert real campaigns to mock format for compatibility with metrics system
+      return realCampaigns.map(c => ({
+        id: c.id,
+        name: c.name,
+        status: c.status as any,
+        objective: c.objective,
+        platform: c.platform as 'meta' | 'google',
+        accountId: c.accountId,
+        budget: c.budget,
+        spend: c.spend,
+        impressions: c.impressions,
+        clicks: c.clicks,
+        ctr: c.ctr,
+        cpc: c.cpc,
+        conversions: c.conversions,
+        roas: c.roas,
+        startDate: c.startDate || new Date().toISOString(),
+        endDate: c.stopDate || new Date().toISOString(),
+      }));
+    }
+    // Fallback to mock data
+    return selectedAccount
       ? mockCampaigns.filter(c => c.accountId === selectedAccount.id)
-      : mockCampaigns,
-    [selectedAccount]
-  );
+      : mockCampaigns;
+  }, [selectedAccount, realCampaigns, isRealData]);
 
   const activeCampaigns = accountCampaigns.filter(c => c.status === 'ACTIVE');
   const allCampaigns = accountCampaigns;
@@ -86,15 +109,35 @@ export default function DashboardPage() {
             display: 'flex', alignItems: 'center', gap: 'var(--space-sm)',
             marginBottom: 'var(--space-lg)', padding: '10px var(--space-md)',
             background: 'var(--bg-glass)', borderRadius: 'var(--radius-md)',
-            border: '1px solid var(--border-color)',
+            border: '1px solid var(--border-color)', flexWrap: 'wrap',
           }}>
             <span className={`badge ${selectedAccount.platform === 'meta' ? 'badge-meta' : 'badge-google'}`}>
               {selectedAccount.platform === 'meta' ? 'Meta Ads' : 'Google Ads'}
             </span>
             <span style={{ fontSize: 14, fontWeight: 600 }}>{selectedAccount.name}</span>
             <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>• {selectedAccount.businessName}</span>
-            <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--text-secondary)' }}>
-              {allCampaigns.length} campanhas • {activeCampaigns.length} ativas
+            {isRealData && (
+              <span className="badge badge-active" style={{ fontSize: 10 }}>
+                <FiWifi size={10} /> Dados reais
+              </span>
+            )}
+            <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 'var(--space-sm)' }}>
+              {loading ? (
+                <span style={{ fontSize: 12, color: 'var(--accent-primary)', display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <FiRefreshCw size={12} className="spin" /> Carregando...
+                </span>
+              ) : (
+                <>
+                  <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                    {allCampaigns.length} campanhas • {activeCampaigns.length} ativas
+                  </span>
+                  {isRealData && (
+                    <button onClick={refetch} className="btn btn-secondary" style={{ padding: '2px 8px', fontSize: 11 }}>
+                      <FiRefreshCw size={11} />
+                    </button>
+                  )}
+                </>
+              )}
             </span>
           </div>
         )}
