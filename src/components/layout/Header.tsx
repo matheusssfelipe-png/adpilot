@@ -1,6 +1,7 @@
 'use client';
 
-import { FiBell, FiSearch } from 'react-icons/fi';
+import { FiSearch, FiBell, FiMenu } from 'react-icons/fi';
+import { useMobileMenu } from './MobileMenuContext';
 
 interface HeaderProps {
   title: string;
@@ -8,30 +9,42 @@ interface HeaderProps {
 }
 
 export default function Header({ title, subtitle }: HeaderProps) {
+  const { toggle } = useMobileMenu();
+
   return (
     <header className="header">
-      <div>
-        <h1 className="header-title">{title}</h1>
-        {subtitle && <p className="text-sm text-secondary">{subtitle}</p>}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-md)' }}>
+        {/* Mobile menu button - hidden on desktop via CSS */}
+        <button
+          className="mobile-menu-btn"
+          onClick={toggle}
+          aria-label="Abrir menu"
+        >
+          <FiMenu />
+        </button>
+        <div>
+          <h1 className="header-title">{title}</h1>
+          {subtitle && <p className="header-subtitle text-sm text-secondary">{subtitle}</p>}
+        </div>
       </div>
       <div className="header-actions">
-        <button className="btn btn-secondary btn-icon" title="Buscar">
+        <button className="btn btn-icon btn-secondary" aria-label="Buscar">
           <FiSearch size={18} />
         </button>
-        <button className="btn btn-secondary btn-icon" title="Notificações" style={{ position: 'relative' }}>
+        <button className="btn btn-icon btn-secondary" aria-label="Notificações" style={{ position: 'relative' }}>
           <FiBell size={18} />
           <span style={{
-            position: 'absolute', top: 6, right: 6,
-            width: 7, height: 7, background: 'var(--danger)',
-            borderRadius: '50%', border: '2px solid var(--bg-secondary)'
+            position: 'absolute', top: 4, right: 4,
+            width: 8, height: 8, borderRadius: '50%',
+            background: 'var(--danger)',
           }} />
         </button>
         <div style={{
           width: 34, height: 34,
-          background: 'var(--accent-gradient)',
           borderRadius: 'var(--radius-md)',
+          background: 'var(--accent-gradient)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: 14, fontWeight: 700, color: 'white', cursor: 'pointer'
+          fontSize: 14, fontWeight: 700, color: 'white',
         }}>
           U
         </div>
