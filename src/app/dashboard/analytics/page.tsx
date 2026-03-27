@@ -1,11 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import Header from '@/components/layout/Header';
+import MetricsConfigPanel from '@/components/MetricsConfigPanel';
 import { mockCampaigns, mockChartData } from '@/lib/mock-data';
+import { ALL_METRICS, PERIOD_OPTIONS, calcTotals } from '@/lib/metrics-config';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar } from 'recharts';
-
-const pieColors = ['#6366f1', '#8b5cf6', '#3b82f6', '#22c55e', '#f59e0b', '#ef4444'];
 
 const platformData = [
   { name: 'Meta Ads', value: 6170, color: '#1877f2' },
@@ -48,38 +48,51 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 
 export default function AnalyticsPage() {
   const [period, setPeriod] = useState('30d');
+  const [selectedMetrics, setSelectedMetrics] = useState<string[]>(
+    ['spend', 'clicks', 'ctr', 'conversions', 'cpc', 'roas']
+  );
 
-  const totalConversions = mockCampaigns.reduce((s, c) => s + c.conversions, 0);
-  const totalSpend = mockCampaigns.reduce((s, c) => s + c.spend, 0);
-  const avgRoas = (mockCampaigns.filter(c => c.roas > 0).reduce((s, c) => s + c.roas, 0) / mockCampaigns.filter(c => c.roas > 0).length).toFixed(1);
+  const activeMetrics = useMemo(
+    () => selectedMetrics.map(key => ALL_METRICS.find(m => m.key === key)!).filter(Boolean),
+    [selectedMetrics]
+  );
+  const totals = useMemo(() => calcTotals(mockCampaigns, ALL_METRICS), []);
+
+  const rankedCampaigns = [...mockCampaigns].filter(c => c.roas > 0).sort((a, b) => b.roas - a.roas);
 
   return (
     <>
       <Header title="Análises" subtitle="Análise detalhada de performance" />
       <div className="page-content">
-        {/* Period selector */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-xl)' }}>
+        {/* Controls */}
+        <div style={{
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap',
+          gap: 'var(--space-sm)', marginBottom: 'var(--space-lg)',
+        }}>
+          {/* Period */}
           <div className="tabs">
-            {['7d', '14d', '30d', '90d'].map(p => (
-              <button key={p} className={`tab ${period === p ? 'active' : ''}`} onClick={() => setPeriod(p)}>
-                {p === '7d' ? '7 dias' : p === '14d' ? '14 dias' : p === '30d' ? '30 dias' : '90 dias'}
+            {PERIOD_OPTIONS.filter(p => p.key !== 'custom').map(p => (
+              <button key={p.key} className={`tab ${period === p.key ? 'active' : ''}`} onClick={() => setPeriod(p.key)}>
+                {p.label.replace('Últimos ', '')}
               </button>
             ))}
           </div>
-          <div style={{ display: 'flex', gap: 'var(--space-lg)' }}>
-            <div style={{ textAlign: 'center' }}>
-              <div className="text-sm text-secondary">Total Conversões</div>
-              <div style={{ fontSize: 22, fontWeight: 800, color: 'var(--success)' }}>{totalConversions.toLocaleString('pt-BR')}</div>
+          <MetricsConfigPanel selectedMetrics={selectedMetrics} onMetricsChange={setSelectedMetrics} />
+        </div>
+
+        {/* Dynamic KPI Summary Cards */}
+        <div className="kpi-grid" style={{ marginBottom: 'var(--space-xl)' }}>
+          {activeMetrics.map(m => (
+            <div key={m.key} className="kpi-card">
+              <div className="kpi-card-header">
+                <span className="kpi-card-label">{m.label}</span>
+                <div className="kpi-card-icon" style={{ background: `${m.color}15`, color: m.color }}>
+                  <m.icon />
+                </div>
+              </div>
+              <div className="kpi-card-value" style={{ fontSize: 22 }}>{m.format(totals[m.key])}</div>
             </div>
-            <div style={{ textAlign: 'center' }}>
-              <div className="text-sm text-secondary">Total Gasto</div>
-              <div style={{ fontSize: 22, fontWeight: 800 }}>R$ {totalSpend.toLocaleString('pt-BR')}</div>
-            </div>
-            <div style={{ textAlign: 'center' }}>
-              <div className="text-sm text-secondary">ROAS Médio</div>
-              <div style={{ fontSize: 22, fontWeight: 800, color: 'var(--accent-primary-hover)' }}>{avgRoas}x</div>
-            </div>
-          </div>
+          ))}
         </div>
 
         {/* Charts Row 1 */}
@@ -88,7 +101,7 @@ export default function AnalyticsPage() {
             <div className="chart-card-header">
               <h3 className="chart-card-title">Impressões ao Longo do Tempo</h3>
             </div>
-            <ResponsiveContainer width="100%" height={280}>
+            <ResponsiveContainer width="100%" height={220}>
               <AreaChart data={mockChartData}>
                 <defs>
                   <linearGradient id="gradImp" x1="0" y1="0" x2="0" y2="1">
@@ -97,8 +110,8 @@ export default function AnalyticsPage() {
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
-                <XAxis dataKey="date" stroke="var(--text-tertiary)" fontSize={11} tickLine={false} />
-                <YAxis stroke="var(--text-tertiary)" fontSize={11} tickLine={false} axisLine={false} />
+                <XAxis dataKey="date" stroke="var(--text-tertiary)" fontSize={10} tickLine={false} />
+                <YAxis stroke="var(--text-tertiary)" fontSize={10} tickLine={false} axisLine={false} width={35} />
                 <Tooltip content={<CustomTooltip />} />
                 <Area type="monotone" dataKey="impressions" name="Impressões" stroke="#6366f1" fill="url(#gradImp)" strokeWidth={2} />
               </AreaChart>
@@ -110,9 +123,9 @@ export default function AnalyticsPage() {
               <h3 className="chart-card-title">Distribuição por Plataforma</h3>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <ResponsiveContainer width="100%" height={280}>
+              <ResponsiveContainer width="100%" height={220}>
                 <PieChart>
-                  <Pie data={platformData} cx="50%" cy="50%" innerRadius={70} outerRadius={110} dataKey="value" paddingAngle={4} strokeWidth={0}>
+                  <Pie data={platformData} cx="50%" cy="50%" innerRadius={60} outerRadius={90} dataKey="value" paddingAngle={4} strokeWidth={0}>
                     {platformData.map((entry, i) => (
                       <Cell key={i} fill={entry.color} />
                     ))}
@@ -121,7 +134,7 @@ export default function AnalyticsPage() {
                 </PieChart>
               </ResponsiveContainer>
             </div>
-            <div style={{ display: 'flex', justifyContent: 'center', gap: 'var(--space-xl)', marginTop: 'var(--space-sm)' }}>
+            <div style={{ display: 'flex', justifyContent: 'center', gap: 'var(--space-lg)', marginTop: 'var(--space-sm)', flexWrap: 'wrap' }}>
               {platformData.map(p => (
                 <div key={p.name} style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)' }}>
                   <div style={{ width: 10, height: 10, borderRadius: '50%', background: p.color }} />
@@ -139,11 +152,11 @@ export default function AnalyticsPage() {
             <div className="chart-card-header">
               <h3 className="chart-card-title">Conversões por Objetivo</h3>
             </div>
-            <ResponsiveContainer width="100%" height={280}>
+            <ResponsiveContainer width="100%" height={220}>
               <BarChart data={objectiveData} layout="vertical">
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
-                <XAxis type="number" stroke="var(--text-tertiary)" fontSize={11} tickLine={false} />
-                <YAxis type="category" dataKey="name" stroke="var(--text-tertiary)" fontSize={12} tickLine={false} width={90} />
+                <XAxis type="number" stroke="var(--text-tertiary)" fontSize={10} tickLine={false} />
+                <YAxis type="category" dataKey="name" stroke="var(--text-tertiary)" fontSize={11} tickLine={false} width={80} />
                 <Tooltip content={<CustomTooltip />} />
                 <Bar dataKey="value" name="Conversões" fill="#8b5cf6" radius={[0, 6, 6, 0]} />
               </BarChart>
@@ -152,13 +165,13 @@ export default function AnalyticsPage() {
 
           <div className="chart-card">
             <div className="chart-card-header">
-              <h3 className="chart-card-title">Demografía do Público</h3>
+              <h3 className="chart-card-title">Demografia do Público</h3>
             </div>
-            <ResponsiveContainer width="100%" height={280}>
+            <ResponsiveContainer width="100%" height={220}>
               <BarChart data={demographicData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
-                <XAxis dataKey="age" stroke="var(--text-tertiary)" fontSize={11} tickLine={false} />
-                <YAxis stroke="var(--text-tertiary)" fontSize={11} tickLine={false} axisLine={false} />
+                <XAxis dataKey="age" stroke="var(--text-tertiary)" fontSize={10} tickLine={false} />
+                <YAxis stroke="var(--text-tertiary)" fontSize={10} tickLine={false} axisLine={false} width={35} />
                 <Tooltip content={<CustomTooltip />} />
                 <Bar dataKey="male" name="Masculino" fill="#3b82f6" radius={[4, 4, 0, 0]} />
                 <Bar dataKey="female" name="Feminino" fill="#ec4899" radius={[4, 4, 0, 0]} />
@@ -167,26 +180,26 @@ export default function AnalyticsPage() {
           </div>
         </div>
 
-        {/* Top Campaigns */}
+        {/* Ranking Table - Desktop */}
         <div className="chart-card">
           <div className="chart-card-header">
             <h3 className="chart-card-title">Ranking de Campanhas por ROAS</h3>
           </div>
-          <div className="table-container" style={{ border: 'none' }}>
+
+          {/* Desktop table */}
+          <div className="table-container desktop-only" style={{ border: 'none' }}>
             <table>
               <thead>
                 <tr>
                   <th>#</th>
                   <th>Campanha</th>
                   <th>Plataforma</th>
-                  <th>Conversões</th>
-                  <th>Gasto</th>
-                  <th>ROAS</th>
+                  {activeMetrics.slice(0, 4).map(m => <th key={m.key}>{m.shortLabel}</th>)}
                   <th>Performance</th>
                 </tr>
               </thead>
               <tbody>
-                {[...mockCampaigns].filter(c => c.roas > 0).sort((a, b) => b.roas - a.roas).map((c, i) => (
+                {rankedCampaigns.map((c, i) => (
                   <tr key={c.id}>
                     <td style={{ fontWeight: 700, color: i === 0 ? '#fbbf24' : 'var(--text-tertiary)' }}>
                       {i === 0 ? '🏆' : `#${i + 1}`}
@@ -197,11 +210,14 @@ export default function AnalyticsPage() {
                         {c.platform === 'meta' ? 'Meta' : 'Google'}
                       </span>
                     </td>
-                    <td>{c.conversions.toLocaleString('pt-BR')}</td>
-                    <td>R$ {c.spend.toLocaleString('pt-BR')}</td>
-                    <td style={{ fontWeight: 800, color: c.roas >= 5 ? 'var(--success)' : c.roas >= 3 ? 'var(--accent-primary-hover)' : 'var(--warning)' }}>
-                      {c.roas}x
-                    </td>
+                    {activeMetrics.slice(0, 4).map(m => (
+                      <td key={m.key} style={{
+                        fontWeight: m.key === 'roas' ? 800 : 400,
+                        color: m.key === 'roas' ? (m.getValue(c) >= 5 ? 'var(--success)' : m.getValue(c) >= 3 ? 'var(--accent-primary-hover)' : 'var(--warning)') : undefined,
+                      }}>
+                        {m.format(m.getValue(c))}
+                      </td>
+                    ))}
                     <td>
                       <div style={{
                         height: 6, borderRadius: 3, background: 'var(--bg-glass)',
@@ -218,6 +234,51 @@ export default function AnalyticsPage() {
                 ))}
               </tbody>
             </table>
+          </div>
+
+          {/* Mobile ranking cards */}
+          <div className="mobile-only">
+            {rankedCampaigns.map((c, i) => (
+              <div key={c.id} className="mobile-campaign-card">
+                <div className="mobile-campaign-card-header">
+                  <div>
+                    <div className="mobile-campaign-card-name">
+                      <span style={{ color: i === 0 ? '#fbbf24' : 'var(--text-tertiary)', marginRight: 6 }}>
+                        {i === 0 ? '🏆' : `#${i + 1}`}
+                      </span>
+                      {c.name}
+                    </div>
+                  </div>
+                  <span className={`badge ${c.platform === 'meta' ? 'badge-meta' : 'badge-google'}`}>
+                    {c.platform === 'meta' ? 'Meta' : 'Google'}
+                  </span>
+                </div>
+                <div className="mobile-campaign-card-metrics">
+                  {activeMetrics.slice(0, 6).map(m => (
+                    <div key={m.key} className="mobile-metric">
+                      <div className="mobile-metric-label">{m.shortLabel}</div>
+                      <div className="mobile-metric-value" style={{
+                        color: m.key === 'roas' ? (m.getValue(c) >= 5 ? 'var(--success)' : 'var(--warning)') : undefined,
+                      }}>
+                        {m.format(m.getValue(c))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                {/* Performance bar */}
+                <div style={{ marginTop: 8 }}>
+                  <div style={{
+                    height: 6, borderRadius: 3, background: 'var(--bg-glass)', overflow: 'hidden',
+                  }}>
+                    <div style={{
+                      height: '100%', borderRadius: 3,
+                      width: `${Math.min((c.roas / 8) * 100, 100)}%`,
+                      background: c.roas >= 5 ? 'var(--success)' : c.roas >= 3 ? 'var(--accent-primary)' : 'var(--warning)',
+                    }} />
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       </div>

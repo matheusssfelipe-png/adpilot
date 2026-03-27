@@ -1,18 +1,12 @@
 'use client';
 
+import { useState, useMemo } from 'react';
 import Header from '@/components/layout/Header';
-import { mockKPIs, mockChartData, mockCampaigns } from '@/lib/mock-data';
-import { FiDollarSign, FiEye, FiMousePointer, FiPercent, FiTrendingUp, FiShoppingCart, FiArrowUp, FiArrowDown } from 'react-icons/fi';
+import MetricsConfigPanel from '@/components/MetricsConfigPanel';
+import { mockChartData, mockCampaigns } from '@/lib/mock-data';
+import { ALL_METRICS, DEFAULT_DASHBOARD_METRICS, PERIOD_OPTIONS, calcTotals } from '@/lib/metrics-config';
+import { FiArrowUp, FiArrowDown } from 'react-icons/fi';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
-
-const kpiConfig = [
-  { key: 'totalSpend', label: 'Gasto Total', icon: FiDollarSign, color: '#6366f1' },
-  { key: 'impressions', label: 'Impressões', icon: FiEye, color: '#8b5cf6' },
-  { key: 'clicks', label: 'Cliques', icon: FiMousePointer, color: '#3b82f6' },
-  { key: 'ctr', label: 'CTR', icon: FiPercent, color: '#22c55e' },
-  { key: 'conversions', label: 'Conversões', icon: FiShoppingCart, color: '#f59e0b' },
-  { key: 'roas', label: 'ROAS', icon: FiTrendingUp, color: '#ef4444' },
-];
 
 const CustomTooltip = ({ active, payload, label }: any) => {
   if (!active || !payload) return null;
@@ -32,29 +26,74 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 };
 
 export default function DashboardPage() {
+  const [selectedMetrics, setSelectedMetrics] = useState<string[]>(DEFAULT_DASHBOARD_METRICS);
+  const [selectedPeriod, setSelectedPeriod] = useState('30d');
+
   const activeCampaigns = mockCampaigns.filter(c => c.status === 'ACTIVE');
+  const activeMetricConfigs = useMemo(
+    () => selectedMetrics.map(key => ALL_METRICS.find(m => m.key === key)!).filter(Boolean),
+    [selectedMetrics]
+  );
+  const totals = useMemo(() => calcTotals(activeCampaigns, ALL_METRICS), []);
+
+  // Simulated change percentages for KPIs
+  const mockChanges: Record<string, { value: string; positive: boolean }> = {
+    spend: { value: '+12.5%', positive: true },
+    budget: { value: '+5.0%', positive: true },
+    impressions: { value: '+8.3%', positive: true },
+    clicks: { value: '+15.1%', positive: true },
+    ctr: { value: '+0.4%', positive: true },
+    cpc: { value: '-8.2%', positive: true },
+    conversions: { value: '+22.3%', positive: true },
+    roas: { value: '+0.8x', positive: true },
+  };
 
   return (
     <>
       <Header title="Dashboard" subtitle="Visão geral das suas campanhas" />
       <div className="page-content">
-        {/* KPI Cards */}
+        {/* Controls bar */}
+        <div style={{
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap',
+          gap: 'var(--space-sm)', marginBottom: 'var(--space-lg)',
+        }}>
+          {/* Period selector */}
+          <div style={{ display: 'flex', gap: 'var(--space-xs)', flexWrap: 'wrap' }}>
+            {PERIOD_OPTIONS.filter(p => p.key !== 'custom').map(p => (
+              <button
+                key={p.key}
+                className={`btn btn-sm ${selectedPeriod === p.key ? 'btn-primary' : 'btn-secondary'}`}
+                onClick={() => setSelectedPeriod(p.key)}
+              >
+                {p.label.replace('Últimos ', '')}
+              </button>
+            ))}
+          </div>
+          <MetricsConfigPanel
+            selectedMetrics={selectedMetrics}
+            onMetricsChange={setSelectedMetrics}
+          />
+        </div>
+
+        {/* KPI Cards — dynamic based on selected metrics */}
         <div className="kpi-grid" style={{ marginBottom: 'var(--space-xl)' }}>
-          {kpiConfig.map(({ key, label, icon: Icon, color }) => {
-            const data = mockKPIs[key as keyof typeof mockKPIs];
+          {activeMetricConfigs.map(metric => {
+            const change = mockChanges[metric.key];
             return (
-              <div key={key} className="kpi-card">
+              <div key={metric.key} className="kpi-card">
                 <div className="kpi-card-header">
-                  <span className="kpi-card-label">{label}</span>
-                  <div className="kpi-card-icon" style={{ background: `${color}15`, color }}>
-                    <Icon />
+                  <span className="kpi-card-label">{metric.label}</span>
+                  <div className="kpi-card-icon" style={{ background: `${metric.color}15`, color: metric.color }}>
+                    <metric.icon />
                   </div>
                 </div>
-                <div className="kpi-card-value">{data.value}</div>
-                <span className={`kpi-card-change ${data.positive ? 'positive' : 'negative'}`}>
-                  {data.positive ? <FiArrowUp size={12} /> : <FiArrowDown size={12} />}
-                  {data.change}
-                </span>
+                <div className="kpi-card-value">{metric.format(totals[metric.key])}</div>
+                {change && (
+                  <span className={`kpi-card-change ${change.positive ? 'positive' : 'negative'}`}>
+                    {change.positive ? <FiArrowUp size={12} /> : <FiArrowDown size={12} />}
+                    {change.value}
+                  </span>
+                )}
               </div>
             );
           })}
@@ -66,7 +105,7 @@ export default function DashboardPage() {
             <div className="chart-card-header">
               <div>
                 <h3 className="chart-card-title">Gastos por Plataforma</h3>
-                <p className="text-sm text-secondary">Últimos 30 dias</p>
+                <p className="text-sm text-secondary">{PERIOD_OPTIONS.find(p => p.key === selectedPeriod)?.label}</p>
               </div>
             </div>
             <ResponsiveContainer width="100%" height={220}>
@@ -95,7 +134,7 @@ export default function DashboardPage() {
             <div className="chart-card-header">
               <div>
                 <h3 className="chart-card-title">Cliques Diários</h3>
-                <p className="text-sm text-secondary">Últimos 30 dias</p>
+                <p className="text-sm text-secondary">{PERIOD_OPTIONS.find(p => p.key === selectedPeriod)?.label}</p>
               </div>
             </div>
             <ResponsiveContainer width="100%" height={220}>
@@ -110,7 +149,7 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Active Campaigns - Desktop Table */}
+        {/* Active Campaigns */}
         <div className="section-header">
           <div>
             <h2 className="section-title">Campanhas Ativas</h2>
@@ -118,18 +157,14 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Desktop: Table */}
+        {/* Desktop: Table — columns match selected metrics */}
         <div className="table-container desktop-only">
           <table>
             <thead>
               <tr>
                 <th>Campanha</th>
                 <th>Plataforma</th>
-                <th>Gasto</th>
-                <th>Impressões</th>
-                <th>Cliques</th>
-                <th>CTR</th>
-                <th>ROAS</th>
+                {activeMetricConfigs.map(m => <th key={m.key}>{m.shortLabel}</th>)}
               </tr>
             </thead>
             <tbody>
@@ -141,20 +176,21 @@ export default function DashboardPage() {
                       {c.platform === 'meta' ? 'Meta' : 'Google'}
                     </span>
                   </td>
-                  <td>R$ {c.spend.toLocaleString('pt-BR')}</td>
-                  <td>{c.impressions.toLocaleString('pt-BR')}</td>
-                  <td>{c.clicks.toLocaleString('pt-BR')}</td>
-                  <td>{c.ctr}%</td>
-                  <td style={{ color: c.roas >= 3 ? 'var(--success)' : c.roas >= 2 ? 'var(--warning)' : 'var(--danger)', fontWeight: 700 }}>
-                    {c.roas}x
-                  </td>
+                  {activeMetricConfigs.map(m => (
+                    <td key={m.key} style={{
+                      fontWeight: m.key === 'roas' ? 700 : 400,
+                      color: m.key === 'roas' ? (m.getValue(c) >= 3 ? 'var(--success)' : m.getValue(c) >= 2 ? 'var(--warning)' : 'var(--danger)') : undefined,
+                    }}>
+                      {m.format(m.getValue(c))}
+                    </td>
+                  ))}
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
 
-        {/* Mobile: Cards */}
+        {/* Mobile: Campaign cards */}
         <div className="mobile-only">
           {activeCampaigns.map(c => (
             <div key={c.id} className="mobile-campaign-card">
@@ -163,27 +199,21 @@ export default function DashboardPage() {
                   <div className="mobile-campaign-card-name">{c.name}</div>
                   <div className="mobile-campaign-card-objective">{c.objective}</div>
                 </div>
-                <div className="mobile-campaign-card-badges">
-                  <span className={`badge ${c.platform === 'meta' ? 'badge-meta' : 'badge-google'}`}>
-                    {c.platform === 'meta' ? 'Meta' : 'Google'}
-                  </span>
-                </div>
+                <span className={`badge ${c.platform === 'meta' ? 'badge-meta' : 'badge-google'}`}>
+                  {c.platform === 'meta' ? 'Meta' : 'Google'}
+                </span>
               </div>
               <div className="mobile-campaign-card-metrics">
-                <div className="mobile-metric">
-                  <div className="mobile-metric-label">Gasto</div>
-                  <div className="mobile-metric-value">R$ {c.spend.toLocaleString('pt-BR')}</div>
-                </div>
-                <div className="mobile-metric">
-                  <div className="mobile-metric-label">CTR</div>
-                  <div className="mobile-metric-value">{c.ctr}%</div>
-                </div>
-                <div className="mobile-metric">
-                  <div className="mobile-metric-label">ROAS</div>
-                  <div className="mobile-metric-value" style={{
-                    color: c.roas >= 3 ? 'var(--success)' : c.roas >= 2 ? 'var(--warning)' : 'var(--danger)'
-                  }}>{c.roas}x</div>
-                </div>
+                {activeMetricConfigs.slice(0, 6).map(m => (
+                  <div key={m.key} className="mobile-metric">
+                    <div className="mobile-metric-label">{m.shortLabel}</div>
+                    <div className="mobile-metric-value" style={{
+                      color: m.key === 'roas' ? (m.getValue(c) >= 3 ? 'var(--success)' : 'var(--warning)') : undefined,
+                    }}>
+                      {m.format(m.getValue(c))}
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           ))}
