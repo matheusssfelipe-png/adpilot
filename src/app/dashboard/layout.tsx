@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 import { usePathname } from 'next/navigation';
 import Sidebar from '@/components/layout/Sidebar';
 import { MobileMenuProvider, useMobileMenu } from '@/components/layout/MobileMenuContext';
+import { AdAccountProvider } from '@/lib/AdAccountContext';
 
 function DashboardContent({ children }: { children: React.ReactNode }) {
   const { isOpen, close } = useMobileMenu();
@@ -42,8 +43,10 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   return (
-    <MobileMenuProvider>
-      <DashboardContent>{children}</DashboardContent>
-    </MobileMenuProvider>
+    <AdAccountProvider>
+      <MobileMenuProvider>
+        <DashboardContent>{children}</DashboardContent>
+      </MobileMenuProvider>
+    </AdAccountProvider>
   );
 }

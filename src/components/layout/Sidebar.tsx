@@ -2,11 +2,14 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useState } from 'react';
 import { 
   FiHome, FiTarget, FiImage, FiBarChart2, FiFileText, 
-  FiUsers, FiSettings, FiLogOut, FiZap, FiMessageSquare, FiX
+  FiUsers, FiSettings, FiLogOut, FiZap, FiMessageSquare, FiX,
+  FiChevronDown, FiCheck
 } from 'react-icons/fi';
 import { useMobileMenu } from './MobileMenuContext';
+import { useAdAccount } from '@/lib/AdAccountContext';
 
 const navItems = [
   { label: 'Principal', items: [
@@ -25,6 +28,15 @@ const navItems = [
 export default function Sidebar() {
   const pathname = usePathname();
   const { isOpen, close } = useMobileMenu();
+  const { accounts, selectedAccount, switchAccount } = useAdAccount();
+  const [accountDropdownOpen, setAccountDropdownOpen] = useState(false);
+
+  // Group accounts by business
+  const businesses = accounts.reduce((acc, account) => {
+    if (!acc[account.businessName]) acc[account.businessName] = [];
+    acc[account.businessName].push(account);
+    return acc;
+  }, {} as Record<string, typeof accounts>);
 
   return (
     <aside className={`sidebar ${isOpen ? 'open' : ''}`}>
@@ -43,6 +55,66 @@ export default function Sidebar() {
         >
           <FiX />
         </button>
+      </div>
+
+      {/* Account Selector */}
+      <div className="account-selector">
+        <button 
+          className="account-selector-btn"
+          onClick={() => setAccountDropdownOpen(!accountDropdownOpen)}
+        >
+          <div className="account-selector-info">
+            <div className="account-selector-platform">
+              <span className={`badge ${selectedAccount?.platform === 'meta' ? 'badge-meta' : 'badge-google'}`} style={{ fontSize: 10, padding: '1px 6px' }}>
+                {selectedAccount?.platform === 'meta' ? 'Meta' : 'Google'}
+              </span>
+            </div>
+            <div className="account-selector-name">{selectedAccount?.name || 'Selecionar conta'}</div>
+            <div className="account-selector-business">{selectedAccount?.businessName}</div>
+          </div>
+          <FiChevronDown 
+            size={16} 
+            style={{ 
+              transition: 'transform 200ms ease',
+              transform: accountDropdownOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+              flexShrink: 0,
+              color: 'var(--text-tertiary)',
+            }} 
+          />
+        </button>
+
+        {/* Dropdown */}
+        {accountDropdownOpen && (
+          <div className="account-dropdown">
+            {Object.entries(businesses).map(([businessName, accts]) => (
+              <div key={businessName}>
+                <div className="account-dropdown-group">{businessName}</div>
+                {accts.map(account => (
+                  <button
+                    key={account.id}
+                    className={`account-dropdown-item ${account.id === selectedAccount?.id ? 'active' : ''}`}
+                    onClick={() => {
+                      switchAccount(account.id);
+                      setAccountDropdownOpen(false);
+                    }}
+                  >
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span className={`badge ${account.platform === 'meta' ? 'badge-meta' : 'badge-google'}`} style={{ fontSize: 9, padding: '0px 5px' }}>
+                          {account.platform === 'meta' ? 'M' : 'G'}
+                        </span>
+                        <span className="account-dropdown-item-name">{account.name}</span>
+                      </div>
+                    </div>
+                    {account.id === selectedAccount?.id && (
+                      <FiCheck size={14} style={{ color: 'var(--accent-primary)', flexShrink: 0 }} />
+                    )}
+                  </button>
+                ))}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       <nav className="sidebar-nav">

@@ -3,7 +3,8 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import Header from '@/components/layout/Header';
 import { mockCampaigns } from '@/lib/mock-data';
-import { FiSend, FiMic, FiMicOff, FiZap, FiAlertCircle, FiCheck, FiVolume2, FiStopCircle } from 'react-icons/fi';
+import { useAdAccount } from '@/lib/AdAccountContext';
+import { FiSend, FiMic, FiMicOff, FiZap, FiAlertCircle, FiCheck } from 'react-icons/fi';
 
 interface Message {
   id: string;
@@ -25,15 +26,13 @@ interface ChatAction {
 
 // Simple markdown-like rendering
 function renderContent(text: string) {
-  // Split by code blocks first
   const parts = text.split(/(```action[\s\S]*?```)/g);
   
   return parts.map((part, i) => {
     if (part.startsWith('```action')) {
-      return null; // Actions are rendered separately
+      return null;
     }
     
-    // Process markdown-like formatting
     const lines = part.split('\n');
     const elements: React.JSX.Element[] = [];
     let inTable = false;
@@ -42,7 +41,6 @@ function renderContent(text: string) {
     lines.forEach((line, lineIdx) => {
       const key = `${i}-${lineIdx}`;
       
-      // Table rows
       if (line.trim().startsWith('|')) {
         if (!inTable) { inTable = true; tableRows = []; }
         const cells = line.split('|').filter(c => c.trim()).map(c => c.trim());
@@ -67,19 +65,16 @@ function renderContent(text: string) {
         tableRows = [];
       }
       
-      // Headers
       if (line.startsWith('## ')) {
         elements.push(<h3 key={key} style={{ fontSize: 16, fontWeight: 700, margin: '16px 0 8px', color: 'var(--text-primary)' }}>{parseBold(line.slice(3))}</h3>);
         return;
       }
       
-      // Bold lines (like **text**)
       if (line.trim().startsWith('**') && line.trim().endsWith('**')) {
         elements.push(<p key={key} style={{ fontWeight: 700, margin: '12px 0 4px' }}>{parseBold(line)}</p>);
         return;
       }
       
-      // Blockquotes
       if (line.trim().startsWith('>')) {
         elements.push(
           <blockquote key={key} style={{
@@ -91,7 +86,6 @@ function renderContent(text: string) {
         return;
       }
       
-      // List items
       if (line.trim().match(/^[-*•]\s/) || line.trim().match(/^\d+\.\s/)) {
         elements.push(
           <div key={key} style={{ display: 'flex', gap: 8, margin: '4px 0', paddingLeft: 4 }}>
@@ -102,17 +96,14 @@ function renderContent(text: string) {
         return;
       }
       
-      // Empty lines
       if (!line.trim()) {
         elements.push(<div key={key} style={{ height: 8 }} />);
         return;
       }
       
-      // Regular text
       elements.push(<p key={key} style={{ margin: '4px 0', lineHeight: 1.7 }}>{parseBold(line)}</p>);
     });
     
-    // Flush remaining table
     if (inTable && tableRows.length > 0) {
       elements.push(
         <div key={`table-end-${i}`} className="table-container" style={{ marginBottom: 12, fontSize: 13 }}>
@@ -146,6 +137,8 @@ function parseBold(text: string) {
 }
 
 export default function ChatPage() {
+  const { selectedAccount } = useAdAccount();
+
   const [messages, setMessages] = useState<Message[]>([
     {
       id: 'welcome',
@@ -162,6 +155,11 @@ export default function ChatPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<any>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Get campaigns for current account
+  const accountCampaigns = selectedAccount
+    ? mockCampaigns.filter(c => c.accountId === selectedAccount.id)
+    : mockCampaigns;
 
   // Auto scroll to bottom
   useEffect(() => {
@@ -236,7 +234,6 @@ export default function ChatPage() {
     const messageText = content || input.trim();
     if (!messageText || isLoading) return;
 
-    // Stop listening if active
     if (isListening) {
       recognitionRef.current?.stop();
       setIsListening(false);
@@ -264,7 +261,13 @@ export default function ChatPage() {
             role: m.role,
             content: m.content,
           })),
-          campaignsContext: mockCampaigns,
+          campaignsContext: accountCampaigns,
+          accountContext: selectedAccount ? {
+            id: selectedAccount.id,
+            name: selectedAccount.name,
+            platform: selectedAccount.platform,
+            businessName: selectedAccount.businessName,
+          } : null,
         }),
       });
 
@@ -318,45 +321,31 @@ export default function ChatPage() {
   return (
     <>
       <Header title="Chat IA" subtitle="Seu gestor de tráfego inteligente" />
-      <div style={{
-        display: 'flex', flexDirection: 'column',
-        height: 'calc(100vh - var(--header-height))',
-        maxWidth: 900, margin: '0 auto', width: '100%',
-      }}>
+      <div className="chat-container">
+        {/* Account badge */}
+        {selectedAccount && (
+          <div className="chat-account-badge">
+            <span className={`badge ${selectedAccount.platform === 'meta' ? 'badge-meta' : 'badge-google'}`} style={{ fontSize: 10, padding: '1px 6px' }}>
+              {selectedAccount.platform === 'meta' ? 'Meta' : 'Google'}
+            </span>
+            <span>Analisando: <strong>{selectedAccount.name}</strong></span>
+            <span style={{ color: 'var(--text-tertiary)' }}>• {accountCampaigns.length} campanhas</span>
+          </div>
+        )}
+
         {/* Messages Area */}
-        <div style={{
-          flex: 1, overflowY: 'auto', padding: 'var(--space-lg)',
-          display: 'flex', flexDirection: 'column', gap: 'var(--space-md)',
-        }}>
+        <div className="chat-messages">
           {messages.map(msg => (
-            <div key={msg.id} style={{
-              display: 'flex', gap: 'var(--space-md)',
-              flexDirection: msg.role === 'user' ? 'row-reverse' : 'row',
-              animation: 'slideUp 300ms ease',
-            }}>
+            <div key={msg.id} className={`chat-msg-row ${msg.role === 'user' ? 'user' : ''}`}>
               {/* Avatar */}
-              <div style={{
-                width: 36, height: 36, borderRadius: 'var(--radius-md)',
-                background: msg.role === 'assistant' ? 'var(--accent-gradient)' : 'var(--bg-tertiary)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 16, flexShrink: 0, color: 'white', fontWeight: 700,
-              }}>
+              <div className={`chat-avatar ${msg.role === 'assistant' ? 'ai' : 'human'}`}>
                 {msg.role === 'assistant' ? <FiZap size={18} /> : 'U'}
               </div>
 
               {/* Content */}
-              <div style={{
-                maxWidth: '80%',
-                background: msg.role === 'user' ? 'var(--accent-primary-glow)' : 'var(--bg-card)',
-                border: `1px solid ${msg.role === 'user' ? 'var(--border-accent)' : 'var(--border-color)'}`,
-                borderRadius: msg.role === 'user'
-                  ? 'var(--radius-lg) var(--radius-lg) var(--radius-sm) var(--radius-lg)'
-                  : 'var(--radius-lg) var(--radius-lg) var(--radius-lg) var(--radius-sm)',
-                padding: 'var(--space-md) var(--space-lg)',
-                fontSize: 14, lineHeight: 1.6,
-              }}>
+              <div className={`chat-bubble ${msg.role === 'user' ? 'user' : ''}`}>
                 {msg.isVoice && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: 'var(--text-tertiary)', marginBottom: 4 }}>
+                  <div className="chat-voice-badge">
                     <FiMic size={10} /> Mensagem de voz
                   </div>
                 )}
@@ -365,20 +354,14 @@ export default function ChatPage() {
 
                 {/* Action Buttons */}
                 {msg.actions && msg.actions.length > 0 && (
-                  <div style={{
-                    marginTop: 'var(--space-md)',
-                    padding: 'var(--space-md)',
-                    background: 'var(--bg-glass)',
-                    borderRadius: 'var(--radius-md)',
-                    border: '1px solid var(--border-color)',
-                  }}>
-                    <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <div className="chat-action-block">
+                    <div className="chat-action-label">
                       <FiAlertCircle size={12} /> Ação Detectada
                     </div>
                     {msg.actions.map((action, idx) => (
-                      <div key={idx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--space-md)' }}>
+                      <div key={idx} className="chat-action-item">
                         <div>
-                          <span style={{ fontSize: 13, fontWeight: 600 }}>
+                          <span className="chat-action-name">
                             {action.type.replace(/_/g, ' ')} — {action.campaignName}
                           </span>
                           <span className={`badge ${action.platform === 'meta' ? 'badge-meta' : 'badge-google'}`} style={{ marginLeft: 8 }}>
@@ -397,7 +380,7 @@ export default function ChatPage() {
                   </div>
                 )}
 
-                <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 8 }}>
+                <div className="chat-bubble-time">
                   {msg.timestamp.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
                 </div>
               </div>
@@ -406,22 +389,11 @@ export default function ChatPage() {
 
           {/* Loading indicator */}
           {isLoading && (
-            <div style={{ display: 'flex', gap: 'var(--space-md)', animation: 'slideUp 300ms ease' }}>
-              <div style={{
-                width: 36, height: 36, borderRadius: 'var(--radius-md)',
-                background: 'var(--accent-gradient)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 16, color: 'white',
-              }}>
+            <div className="chat-loading">
+              <div className="chat-avatar ai">
                 <FiZap size={18} />
               </div>
-              <div style={{
-                background: 'var(--bg-card)',
-                border: '1px solid var(--border-color)',
-                borderRadius: 'var(--radius-lg) var(--radius-lg) var(--radius-lg) var(--radius-sm)',
-                padding: 'var(--space-md) var(--space-lg)',
-                display: 'flex', alignItems: 'center', gap: 'var(--space-sm)',
-              }}>
+              <div className="chat-loading-bubble">
                 <div className="spinner" />
                 <span className="text-sm text-secondary">Analisando...</span>
               </div>
@@ -433,10 +405,7 @@ export default function ChatPage() {
 
         {/* Quick Prompts */}
         {messages.length <= 1 && (
-          <div style={{
-            display: 'flex', gap: 'var(--space-sm)', padding: '0 var(--space-lg)',
-            flexWrap: 'wrap', justifyContent: 'center',
-          }}>
+          <div className="chat-quick-prompts">
             {quickPrompts.map((prompt, i) => (
               <button
                 key={i}
@@ -452,30 +421,15 @@ export default function ChatPage() {
 
         {/* Interim transcript display */}
         {interimTranscript && (
-          <div style={{
-            padding: '8px var(--space-lg)',
-            fontSize: 13, color: 'var(--text-tertiary)',
-            display: 'flex', alignItems: 'center', gap: 8,
-          }}>
+          <div className="chat-interim">
             <FiMic size={14} color="var(--danger)" className="pulse" />
             <em>{interimTranscript}</em>
           </div>
         )}
 
         {/* Input Area */}
-        <div style={{
-          padding: 'var(--space-md) var(--space-lg) var(--space-lg)',
-          borderTop: '1px solid var(--border-color)',
-          background: 'var(--bg-secondary)',
-        }}>
-          <div style={{
-            display: 'flex', gap: 'var(--space-sm)', alignItems: 'center',
-            background: 'var(--bg-glass)',
-            border: '1px solid var(--border-color)',
-            borderRadius: 'var(--radius-lg)',
-            padding: '4px 4px 4px var(--space-md)',
-            transition: 'border-color var(--transition-fast)',
-          }}>
+        <div className="chat-input-area">
+          <div className="chat-input-bar">
             {/* Language toggle for voice */}
             <button
               className="btn btn-sm"
@@ -492,15 +446,11 @@ export default function ChatPage() {
 
             <input
               ref={inputRef}
-              className="input"
+              className="chat-input"
               value={input}
               onChange={e => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder={isListening ? 'Ouvindo...' : 'Digite sua mensagem ou use o microfone...'}
-              style={{
-                flex: 1, border: 'none', background: 'transparent',
-                padding: '10px 0', outline: 'none',
-              }}
               disabled={isLoading}
             />
 
@@ -537,11 +487,11 @@ export default function ChatPage() {
             </button>
           </div>
 
-          <div style={{ display: 'flex', justifyContent: 'center', marginTop: 8, gap: 'var(--space-lg)' }}>
-            <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>
+          <div className="chat-footer-hints">
+            <span className="chat-footer-hint">
               💡 Dica: Use o microfone 🎙️ para comandos por voz
             </span>
-            <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>
+            <span className="chat-footer-hint">
               🌐 {voiceLang === 'pt-BR' ? 'Português BR' : 'English US'}
             </span>
           </div>

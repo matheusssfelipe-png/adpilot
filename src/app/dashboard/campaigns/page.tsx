@@ -1,8 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import Header from '@/components/layout/Header';
 import { mockCampaigns, Campaign, CampaignStatus, Platform } from '@/lib/mock-data';
+import { useAdAccount } from '@/lib/AdAccountContext';
 import { FiPlay, FiPause, FiEdit2, FiPlus, FiSearch, FiX } from 'react-icons/fi';
 
 const statusLabels: Record<CampaignStatus, string> = {
@@ -20,13 +21,27 @@ const statusClass: Record<CampaignStatus, string> = {
 };
 
 export default function CampaignsPage() {
+  const { selectedAccount } = useAdAccount();
+  
+  // Filter by selected account first
+  const accountCampaigns = useMemo(
+    () => selectedAccount
+      ? mockCampaigns.filter(c => c.accountId === selectedAccount.id)
+      : mockCampaigns,
+    [selectedAccount]
+  );
+
   const [campaigns, setCampaigns] = useState<Campaign[]>(mockCampaigns);
   const [filterPlatform, setFilterPlatform] = useState<'all' | Platform>('all');
   const [filterStatus, setFilterStatus] = useState<'all' | CampaignStatus>('all');
   const [search, setSearch] = useState('');
   const [showCreateModal, setShowCreateModal] = useState(false);
 
-  const filtered = campaigns.filter(c => {
+  const currentCampaigns = campaigns.filter(c => 
+    selectedAccount ? c.accountId === selectedAccount.id : true
+  );
+
+  const filtered = currentCampaigns.filter(c => {
     if (filterPlatform !== 'all' && c.platform !== filterPlatform) return false;
     if (filterStatus !== 'all' && c.status !== filterStatus) return false;
     if (search && !c.name.toLowerCase().includes(search.toLowerCase())) return false;

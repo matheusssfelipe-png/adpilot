@@ -3,8 +3,9 @@
 import { useState, useMemo } from 'react';
 import Header from '@/components/layout/Header';
 import MetricsConfigPanel from '@/components/MetricsConfigPanel';
-import { mockChartData, mockCampaigns } from '@/lib/mock-data';
+import { mockCampaigns } from '@/lib/mock-data';
 import { ALL_METRICS, DEFAULT_DASHBOARD_METRICS, PERIOD_OPTIONS, calcTotals } from '@/lib/metrics-config';
+import { useAdAccount } from '@/lib/AdAccountContext';
 import { FiArrowUp, FiArrowDown } from 'react-icons/fi';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
 
@@ -25,16 +26,43 @@ const CustomTooltip = ({ active, payload, label }: any) => {
   );
 };
 
+// Generate chart data based on account (deterministic seed from accountId)
+function generateChartData(accountId: string) {
+  const seed = accountId.split('').reduce((a, c) => a + c.charCodeAt(0), 0);
+  return Array.from({ length: 30 }, (_, i) => ({
+    date: new Date(2026, 2, i + 1).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }),
+    meta: Math.floor(((Math.sin(seed + i * 0.7) + 1) / 2) * 500 + 300),
+    google: Math.floor(((Math.cos(seed + i * 0.5) + 1) / 2) * 400 + 200),
+    clicks: Math.floor(((Math.sin(seed + i * 1.1) + 1) / 2) * 2000 + 800),
+  }));
+}
+
 export default function DashboardPage() {
+  const { selectedAccount } = useAdAccount();
   const [selectedMetrics, setSelectedMetrics] = useState<string[]>(DEFAULT_DASHBOARD_METRICS);
   const [selectedPeriod, setSelectedPeriod] = useState('30d');
 
-  const activeCampaigns = mockCampaigns.filter(c => c.status === 'ACTIVE');
+  // Filter campaigns by selected account
+  const accountCampaigns = useMemo(
+    () => selectedAccount
+      ? mockCampaigns.filter(c => c.accountId === selectedAccount.id)
+      : mockCampaigns,
+    [selectedAccount]
+  );
+
+  const activeCampaigns = accountCampaigns.filter(c => c.status === 'ACTIVE');
+  const allCampaigns = accountCampaigns;
+
   const activeMetricConfigs = useMemo(
     () => selectedMetrics.map(key => ALL_METRICS.find(m => m.key === key)!).filter(Boolean),
     [selectedMetrics]
   );
-  const totals = useMemo(() => calcTotals(activeCampaigns, ALL_METRICS), []);
+  const totals = useMemo(() => calcTotals(activeCampaigns, ALL_METRICS), [activeCampaigns]);
+
+  const chartData = useMemo(
+    () => generateChartData(selectedAccount?.id || 'default'),
+    [selectedAccount]
+  );
 
   // Simulated change percentages for KPIs
   const mockChanges: Record<string, { value: string; positive: boolean }> = {
@@ -50,8 +78,27 @@ export default function DashboardPage() {
 
   return (
     <>
-      <Header title="Dashboard" subtitle="Visão geral das suas campanhas" />
+      <Header title="Dashboard" subtitle={selectedAccount ? selectedAccount.name : 'Visão geral'} />
       <div className="page-content">
+        {/* Account indicator */}
+        {selectedAccount && (
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 'var(--space-sm)',
+            marginBottom: 'var(--space-lg)', padding: '10px var(--space-md)',
+            background: 'var(--bg-glass)', borderRadius: 'var(--radius-md)',
+            border: '1px solid var(--border-color)',
+          }}>
+            <span className={`badge ${selectedAccount.platform === 'meta' ? 'badge-meta' : 'badge-google'}`}>
+              {selectedAccount.platform === 'meta' ? 'Meta Ads' : 'Google Ads'}
+            </span>
+            <span style={{ fontSize: 14, fontWeight: 600 }}>{selectedAccount.name}</span>
+            <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>• {selectedAccount.businessName}</span>
+            <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--text-secondary)' }}>
+              {allCampaigns.length} campanhas • {activeCampaigns.length} ativas
+            </span>
+          </div>
+        )}
+
         {/* Controls bar */}
         <div style={{
           display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap',
@@ -109,7 +156,7 @@ export default function DashboardPage() {
               </div>
             </div>
             <ResponsiveContainer width="100%" height={220}>
-              <AreaChart data={mockChartData}>
+              <AreaChart data={chartData}>
                 <defs>
                   <linearGradient id="gradMeta" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="#1877f2" stopOpacity={0.3} />
@@ -138,7 +185,7 @@ export default function DashboardPage() {
               </div>
             </div>
             <ResponsiveContainer width="100%" height={220}>
-              <BarChart data={mockChartData}>
+              <BarChart data={chartData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
                 <XAxis dataKey="date" stroke="var(--text-tertiary)" fontSize={10} tickLine={false} />
                 <YAxis stroke="var(--text-tertiary)" fontSize={10} tickLine={false} axisLine={false} width={35} />
@@ -218,6 +265,14 @@ export default function DashboardPage() {
             </div>
           ))}
         </div>
+
+        {activeCampaigns.length === 0 && (
+          <div className="empty-state">
+            <div className="empty-state-icon">📭</div>
+            <p className="empty-state-text">Nenhuma campanha ativa nesta conta</p>
+            <p className="text-sm text-secondary">Troque de conta ou crie uma nova campanha</p>
+          </div>
+        )}
       </div>
     </>
   );
