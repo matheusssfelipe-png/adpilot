@@ -2,11 +2,11 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { 
   FiHome, FiTarget, FiImage, FiBarChart2, FiFileText, 
   FiUsers, FiSettings, FiLogOut, FiZap, FiMessageSquare, FiX,
-  FiChevronDown, FiCheck
+  FiChevronDown, FiCheck, FiSearch
 } from 'react-icons/fi';
 import { useMobileMenu } from './MobileMenuContext';
 import { useAdAccount } from '@/lib/AdAccountContext';
@@ -30,9 +30,21 @@ export default function Sidebar() {
   const { isOpen, close } = useMobileMenu();
   const { accounts, selectedAccount, switchAccount } = useAdAccount();
   const [accountDropdownOpen, setAccountDropdownOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
 
-  // Group accounts by business
-  const businesses = accounts.reduce((acc, account) => {
+  // Filter accounts by search query
+  const filteredAccounts = useMemo(() => {
+    if (!searchQuery.trim()) return accounts;
+    const q = searchQuery.toLowerCase();
+    return accounts.filter(a => 
+      a.name.toLowerCase().includes(q) || 
+      a.businessName.toLowerCase().includes(q) ||
+      a.id.toLowerCase().includes(q)
+    );
+  }, [accounts, searchQuery]);
+
+  // Group filtered accounts by business
+  const businesses = filteredAccounts.reduce((acc, account) => {
     if (!acc[account.businessName]) acc[account.businessName] = [];
     acc[account.businessName].push(account);
     return acc;
@@ -61,7 +73,10 @@ export default function Sidebar() {
       <div className="account-selector">
         <button 
           className="account-selector-btn"
-          onClick={() => setAccountDropdownOpen(!accountDropdownOpen)}
+          onClick={() => {
+            setAccountDropdownOpen(!accountDropdownOpen);
+            if (!accountDropdownOpen) setSearchQuery('');
+          }}
         >
           <div className="account-selector-info">
             <div className="account-selector-platform">
@@ -86,33 +101,56 @@ export default function Sidebar() {
         {/* Dropdown */}
         {accountDropdownOpen && (
           <div className="account-dropdown">
-            {Object.entries(businesses).map(([businessName, accts]) => (
-              <div key={businessName}>
-                <div className="account-dropdown-group">{businessName}</div>
-                {accts.map(account => (
-                  <button
-                    key={account.id}
-                    className={`account-dropdown-item ${account.id === selectedAccount?.id ? 'active' : ''}`}
-                    onClick={() => {
-                      switchAccount(account.id);
-                      setAccountDropdownOpen(false);
-                    }}
-                  >
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <span className={`badge ${account.platform === 'meta' ? 'badge-meta' : 'badge-google'}`} style={{ fontSize: 9, padding: '0px 5px' }}>
-                          {account.platform === 'meta' ? 'M' : 'G'}
-                        </span>
-                        <span className="account-dropdown-item-name">{account.name}</span>
-                      </div>
-                    </div>
-                    {account.id === selectedAccount?.id && (
-                      <FiCheck size={14} style={{ color: 'var(--accent-primary)', flexShrink: 0 }} />
-                    )}
-                  </button>
-                ))}
-              </div>
-            ))}
+            {/* Search input */}
+            <div className="account-search-wrapper">
+              <FiSearch size={14} className="account-search-icon" />
+              <input
+                type="text"
+                className="account-search-input"
+                placeholder={`Buscar entre ${accounts.length} contas...`}
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                autoFocus
+              />
+            </div>
+
+            {/* Scrollable accounts list */}
+            <div className="account-dropdown-list">
+              {Object.keys(businesses).length === 0 ? (
+                <div className="account-dropdown-empty">
+                  Nenhuma conta encontrada
+                </div>
+              ) : (
+                Object.entries(businesses).map(([businessName, accts]) => (
+                  <div key={businessName}>
+                    <div className="account-dropdown-group">{businessName} ({accts.length})</div>
+                    {accts.map(account => (
+                      <button
+                        key={account.id}
+                        className={`account-dropdown-item ${account.id === selectedAccount?.id ? 'active' : ''}`}
+                        onClick={() => {
+                          switchAccount(account.id);
+                          setAccountDropdownOpen(false);
+                          setSearchQuery('');
+                        }}
+                      >
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <span className={`badge ${account.platform === 'meta' ? 'badge-meta' : 'badge-google'}`} style={{ fontSize: 9, padding: '0px 5px' }}>
+                              {account.platform === 'meta' ? 'M' : 'G'}
+                            </span>
+                            <span className="account-dropdown-item-name">{account.name}</span>
+                          </div>
+                        </div>
+                        {account.id === selectedAccount?.id && (
+                          <FiCheck size={14} style={{ color: 'var(--accent-primary)', flexShrink: 0 }} />
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                ))
+              )}
+            </div>
           </div>
         )}
       </div>

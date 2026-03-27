@@ -1421,9 +1421,61 @@ tr:hover td { background: var(--bg-glass); }
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-lg);
   z-index: 150;
-  max-height: 300px;
-  overflow-y: auto;
   animation: slideUp 200ms ease;
+  display: flex;
+  flex-direction: column;
+  max-height: 450px;
+}
+
+.account-search-wrapper {
+  position: relative;
+  padding: var(--space-sm) var(--space-md);
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+
+.account-search-icon {
+  position: absolute;
+  left: calc(var(--space-md) + 10px);
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-tertiary);
+  pointer-events: none;
+}
+
+.account-search-input {
+  width: 100%;
+  padding: 8px 10px 8px 32px;
+  background: var(--bg-glass);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 12px;
+  font-family: inherit;
+  outline: none;
+  transition: border-color var(--transition-fast);
+}
+
+.account-search-input:focus {
+  border-color: var(--accent-primary);
+}
+
+.account-search-input::placeholder {
+  color: var(--text-tertiary);
+}
+
+.account-dropdown-list {
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+  padding-bottom: var(--space-xs);
+}
+
+.account-dropdown-empty {
+  padding: var(--space-lg) var(--space-md);
+  text-align: center;
+  color: var(--text-tertiary);
+  font-size: 13px;
 }
 
 .account-dropdown-group {

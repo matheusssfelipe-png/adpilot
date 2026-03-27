@@ -6,12 +6,9 @@ import { useAdAccount } from '@/lib/AdAccountContext';
 import { FiSave, FiEye, FiEyeOff, FiCheck, FiLink, FiXCircle, FiExternalLink, FiShield } from 'react-icons/fi';
 
 export default function SettingsPage() {
-  const { accounts } = useAdAccount();
+  const { accounts, metaConnected, disconnectMeta } = useAdAccount();
   const [saved, setSaved] = useState(false);
   const [showTokens, setShowTokens] = useState(false);
-
-  // Simulated connection status
-  const [metaConnected, setMetaConnected] = useState(true);
   const [googleConnected, setGoogleConnected] = useState(true);
 
   const handleSave = () => {
@@ -84,7 +81,7 @@ export default function SettingsPage() {
               <div style={{ display: 'flex', gap: 'var(--space-sm)' }}>
                 <button
                   className="btn btn-secondary"
-                  onClick={() => setMetaConnected(false)}
+                  onClick={disconnectMeta}
                 >
                   <FiXCircle size={14} /> Desconectar
                 </button>

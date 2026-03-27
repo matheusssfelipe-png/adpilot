@@ -41,8 +41,8 @@ export async function GET(request: NextRequest) {
     const accountsData = await accountsResponse.json();
 
     // In a real app, save tokens to database here
-    // For now, redirect with success
-    return NextResponse.redirect(`${appUrl}/dashboard/settings?success=meta&accounts=${accountsData.data?.length || 0}`);
+    // For now, redirect with success and token so frontend can use it
+    return NextResponse.redirect(`${appUrl}/dashboard/settings?success=meta&token=${accessToken}&accounts=${accountsData.data?.length || 0}`);
   } catch (error: any) {
     console.error('Meta OAuth callback error:', error);
     return NextResponse.redirect(`${appUrl}/dashboard/settings?error=meta_failed`);
