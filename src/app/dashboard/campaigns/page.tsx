@@ -45,9 +45,9 @@ export default function CampaignsPage() {
       <Header title="Campanhas" subtitle="Gerencie todas as suas campanhas" />
       <div className="page-content">
         {/* Toolbar */}
-        <div style={{ display: 'flex', gap: 'var(--space-md)', marginBottom: 'var(--space-lg)', flexWrap: 'wrap', alignItems: 'center' }}>
-          <div style={{ flex: 1, minWidth: 240, position: 'relative' }}>
-            <FiSearch style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-tertiary)' }} />
+        <div className="toolbar">
+          <div className="toolbar-search">
+            <FiSearch className="toolbar-search-icon" />
             <input
               className="input w-full"
               placeholder="Buscar campanhas..."
@@ -63,7 +63,7 @@ export default function CampaignsPage() {
             <button className={`tab ${filterPlatform === 'google' ? 'active' : ''}`} onClick={() => setFilterPlatform('google')}>Google</button>
           </div>
 
-          <select className="input" value={filterStatus} onChange={e => setFilterStatus(e.target.value as any)} style={{ width: 150 }}>
+          <select className="input" value={filterStatus} onChange={e => setFilterStatus(e.target.value as any)}>
             <option value="all">Todos Status</option>
             <option value="ACTIVE">Ativas</option>
             <option value="PAUSED">Pausadas</option>
