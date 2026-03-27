@@ -1,181 +1,482 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import Header from '@/components/layout/Header';
-import { mockCampaigns } from '@/lib/mock-data';
-import { FiFileText, FiDownload, FiSend, FiCalendar, FiEye, FiCheck } from 'react-icons/fi';
+import { mockCampaigns, Campaign } from '@/lib/mock-data';
+import {
+  FiFileText, FiDownload, FiSend, FiCalendar, FiEye,
+  FiChevronUp, FiChevronDown, FiCheck, FiX, FiSettings,
+  FiDollarSign, FiMousePointer, FiPercent, FiTrendingUp,
+  FiShoppingCart, FiEyeOff, FiTarget, FiArrowUp, FiArrowDown
+} from 'react-icons/fi';
 
-interface Report {
+// All available metrics
+interface MetricConfig {
+  key: string;
+  label: string;
+  shortLabel: string;
+  icon: any;
+  color: string;
+  format: (value: number) => string;
+  getValue: (c: Campaign) => number;
+}
+
+const ALL_METRICS: MetricConfig[] = [
+  {
+    key: 'spend', label: 'Gasto', shortLabel: 'Gasto',
+    icon: FiDollarSign, color: '#6366f1',
+    format: (v) => `R$ ${v.toLocaleString('pt-BR')}`,
+    getValue: (c) => c.spend,
+  },
+  {
+    key: 'budget', label: 'Orçamento', shortLabel: 'Budget',
+    icon: FiTarget, color: '#8b5cf6',
+    format: (v) => `R$ ${v.toLocaleString('pt-BR')}`,
+    getValue: (c) => c.budget,
+  },
+  {
+    key: 'impressions', label: 'Impressões', shortLabel: 'Impr.',
+    icon: FiEye, color: '#3b82f6',
+    format: (v) => v >= 1000 ? `${(v / 1000).toFixed(1)}K` : v.toString(),
+    getValue: (c) => c.impressions,
+  },
+  {
+    key: 'clicks', label: 'Cliques', shortLabel: 'Cliques',
+    icon: FiMousePointer, color: '#06b6d4',
+    format: (v) => v >= 1000 ? `${(v / 1000).toFixed(1)}K` : v.toString(),
+    getValue: (c) => c.clicks,
+  },
+  {
+    key: 'ctr', label: 'CTR (%)', shortLabel: 'CTR',
+    icon: FiPercent, color: '#22c55e',
+    format: (v) => `${v.toFixed(2)}%`,
+    getValue: (c) => c.ctr,
+  },
+  {
+    key: 'cpc', label: 'CPC', shortLabel: 'CPC',
+    icon: FiDollarSign, color: '#f59e0b',
+    format: (v) => `R$ ${v.toFixed(2)}`,
+    getValue: (c) => c.cpc,
+  },
+  {
+    key: 'conversions', label: 'Conversões', shortLabel: 'Conv.',
+    icon: FiShoppingCart, color: '#ef4444',
+    format: (v) => v.toLocaleString('pt-BR'),
+    getValue: (c) => c.conversions,
+  },
+  {
+    key: 'roas', label: 'ROAS', shortLabel: 'ROAS',
+    icon: FiTrendingUp, color: '#10b981',
+    format: (v) => v > 0 ? `${v.toFixed(1)}x` : '—',
+    getValue: (c) => c.roas,
+  },
+];
+
+const PERIOD_OPTIONS = [
+  { key: '7d', label: 'Últimos 7 dias' },
+  { key: '14d', label: 'Últimos 14 dias' },
+  { key: '30d', label: 'Últimos 30 dias' },
+  { key: '90d', label: 'Últimos 90 dias' },
+  { key: 'custom', label: 'Personalizado' },
+];
+
+interface SavedReport {
   id: string;
   name: string;
   period: string;
-  campaigns: number;
+  metrics: string[];
+  campaigns: string[];
   createdAt: string;
-  status: 'ready' | 'generating';
 }
 
-const mockReports: Report[] = [
-  { id: 'r1', name: 'Relatório Mensal - Março 2026', period: '01/03 - 31/03', campaigns: 6, createdAt: '2026-03-25', status: 'ready' },
-  { id: 'r2', name: 'Relatório Semanal - Sem 12', period: '17/03 - 23/03', campaigns: 4, createdAt: '2026-03-23', status: 'ready' },
-  { id: 'r3', name: 'Performance Black Friday', period: '01/03 - 15/03', campaigns: 3, createdAt: '2026-03-15', status: 'ready' },
+const mockSavedReports: SavedReport[] = [
+  {
+    id: 'r1', name: 'Relatório Mensal - Março 2026',
+    period: '01/03 - 31/03', metrics: ['spend', 'impressions', 'clicks', 'ctr', 'roas'],
+    campaigns: ['meta-1', 'meta-2', 'google-1'], createdAt: '2026-03-25'
+  },
+  {
+    id: 'r2', name: 'Performance Semanal',
+    period: '17/03 - 23/03', metrics: ['spend', 'cpc', 'conversions', 'roas'],
+    campaigns: ['meta-1', 'google-3'], createdAt: '2026-03-23'
+  },
 ];
 
 export default function ReportsPage() {
-  const [reports, setReports] = useState<Report[]>(mockReports);
+  // Report config state
   const [showCreate, setShowCreate] = useState(false);
   const [reportName, setReportName] = useState('');
+  const [selectedPeriod, setSelectedPeriod] = useState('30d');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
-  const [selectedCampaigns, setSelectedCampaigns] = useState<string[]>([]);
+  const [selectedMetrics, setSelectedMetrics] = useState<string[]>(
+    ['spend', 'impressions', 'clicks', 'ctr', 'conversions', 'roas']
+  );
+  const [selectedCampaigns, setSelectedCampaigns] = useState<string[]>(
+    mockCampaigns.filter(c => c.status === 'ACTIVE').map(c => c.id)
+  );
+  const [savedReports, setSavedReports] = useState<SavedReport[]>(mockSavedReports);
   const [generating, setGenerating] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
 
+  // Active metrics config
+  const activeMetrics = useMemo(
+    () => selectedMetrics.map(key => ALL_METRICS.find(m => m.key === key)!).filter(Boolean),
+    [selectedMetrics]
+  );
+
+  const filteredCampaigns = useMemo(
+    () => mockCampaigns.filter(c => selectedCampaigns.includes(c.id)),
+    [selectedCampaigns]
+  );
+
+  // Metric toggle
+  const toggleMetric = (key: string) => {
+    setSelectedMetrics(prev =>
+      prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]
+    );
+  };
+
+  // Move metric up/down
+  const moveMetric = (key: string, direction: 'up' | 'down') => {
+    setSelectedMetrics(prev => {
+      const idx = prev.indexOf(key);
+      if (idx === -1) return prev;
+      if (direction === 'up' && idx === 0) return prev;
+      if (direction === 'down' && idx === prev.length - 1) return prev;
+      const next = [...prev];
+      const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
+      [next[idx], next[swapIdx]] = [next[swapIdx], next[idx]];
+      return next;
+    });
+  };
+
+  // Campaign toggle
   const toggleCampaign = (id: string) => {
     setSelectedCampaigns(prev =>
       prev.includes(id) ? prev.filter(c => c !== id) : [...prev, id]
     );
   };
 
+  const selectAllCampaigns = () => setSelectedCampaigns(mockCampaigns.map(c => c.id));
+  const selectNoneCampaigns = () => setSelectedCampaigns([]);
+
+  // Totals
+  const totals = useMemo(() => {
+    const result: Record<string, number> = {};
+    ALL_METRICS.forEach(m => {
+      if (['ctr', 'cpc', 'roas'].includes(m.key)) {
+        const values = filteredCampaigns.map(c => m.getValue(c)).filter(v => v > 0);
+        result[m.key] = values.length ? values.reduce((a, b) => a + b, 0) / values.length : 0;
+      } else {
+        result[m.key] = filteredCampaigns.reduce((sum, c) => sum + m.getValue(c), 0);
+      }
+    });
+    return result;
+  }, [filteredCampaigns]);
+
+  // Generate
   const handleGenerate = async () => {
     setGenerating(true);
-    await new Promise(r => setTimeout(r, 3000));
-    const newReport: Report = {
+    await new Promise(r => setTimeout(r, 2000));
+    const newReport: SavedReport = {
       id: `r${Date.now()}`,
       name: reportName || 'Novo Relatório',
-      period: `${startDate} - ${endDate}`,
-      campaigns: selectedCampaigns.length || mockCampaigns.length,
+      period: selectedPeriod === 'custom' ? `${startDate} - ${endDate}` : PERIOD_OPTIONS.find(p => p.key === selectedPeriod)!.label,
+      metrics: [...selectedMetrics],
+      campaigns: [...selectedCampaigns],
       createdAt: new Date().toISOString().split('T')[0],
-      status: 'ready',
     };
-    setReports(prev => [newReport, ...prev]);
+    setSavedReports(prev => [newReport, ...prev]);
     setGenerating(false);
     setShowCreate(false);
+    setShowPreview(true);
     setReportName('');
   };
 
   return (
     <>
-      <Header title="Relatórios" subtitle="Gere e exporte relatórios para seus clientes" />
+      <Header title="Relatórios" subtitle="Relatórios personalizados para seus clientes" />
       <div className="page-content">
-        {/* Actions */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-xl)' }}>
-          <div>
-            <p className="text-secondary">{reports.length} relatórios gerados</p>
-          </div>
-          <button className="btn btn-primary" onClick={() => setShowCreate(!showCreate)}>
-            <FiFileText /> Novo Relatório
+        {/* Top Actions */}
+        <div className="page-top-bar">
+          <p className="text-secondary">{savedReports.length} relatórios salvos</p>
+          <button className="btn btn-primary" onClick={() => { setShowCreate(!showCreate); setShowPreview(false); }}>
+            <FiSettings /> Criar Relatório
           </button>
         </div>
 
-        {/* Create Report Form */}
+        {/* Report Builder */}
         {showCreate && (
-          <div className="card" style={{ marginBottom: 'var(--space-xl)' }}>
-            <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 'var(--space-lg)' }}>
+          <div className="card" style={{ marginBottom: 'var(--space-xl)', padding: 'var(--space-lg)' }}>
+            <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 'var(--space-lg)', display: 'flex', alignItems: 'center', gap: 8 }}>
               📊 Configurar Relatório
             </h3>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-md)' }}>
-              <div className="input-group">
-                <label className="input-label">Nome do Relatório</label>
-                <input
-                  className="input"
-                  placeholder="Ex: Relatório Mensal - Cliente X"
-                  value={reportName}
-                  onChange={e => setReportName(e.target.value)}
-                />
-              </div>
-              <div className="grid-2">
-                <div className="input-group">
-                  <label className="input-label">Data Início</label>
-                  <input className="input" type="date" value={startDate} onChange={e => setStartDate(e.target.value)} />
-                </div>
-                <div className="input-group">
-                  <label className="input-label">Data Fim</label>
-                  <input className="input" type="date" value={endDate} onChange={e => setEndDate(e.target.value)} />
-                </div>
-              </div>
 
-              <div className="input-group">
-                <label className="input-label">Campanhas (selecione as que deseja incluir)</label>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-sm)' }}>
-                  {mockCampaigns.map(c => (
-                    <label
-                      key={c.id}
+            {/* Name */}
+            <div className="input-group" style={{ marginBottom: 'var(--space-lg)' }}>
+              <label className="input-label">Nome do Relatório</label>
+              <input className="input" placeholder="Ex: Relatório Mensal - Cliente X" value={reportName} onChange={e => setReportName(e.target.value)} />
+            </div>
+
+            {/* Period Selector */}
+            <div style={{ marginBottom: 'var(--space-lg)' }}>
+              <label className="input-label" style={{ marginBottom: 8, display: 'block' }}>📅 Período</label>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-sm)' }}>
+                {PERIOD_OPTIONS.map(p => (
+                  <button
+                    key={p.key}
+                    className={`btn btn-sm ${selectedPeriod === p.key ? 'btn-primary' : 'btn-secondary'}`}
+                    onClick={() => setSelectedPeriod(p.key)}
+                  >
+                    {p.label}
+                  </button>
+                ))}
+              </div>
+              {selectedPeriod === 'custom' && (
+                <div className="grid-2" style={{ marginTop: 'var(--space-md)' }}>
+                  <div className="input-group">
+                    <label className="input-label">Início</label>
+                    <input className="input" type="date" value={startDate} onChange={e => setStartDate(e.target.value)} />
+                  </div>
+                  <div className="input-group">
+                    <label className="input-label">Fim</label>
+                    <input className="input" type="date" value={endDate} onChange={e => setEndDate(e.target.value)} />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Metrics Selector */}
+            <div style={{ marginBottom: 'var(--space-lg)' }}>
+              <label className="input-label" style={{ marginBottom: 8, display: 'block' }}>
+                📈 Métricas ({selectedMetrics.length} selecionadas) — clique para ativar/desativar, use as setas para reordenar
+              </label>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-xs)' }}>
+                {ALL_METRICS.map(metric => {
+                  const isActive = selectedMetrics.includes(metric.key);
+                  const order = selectedMetrics.indexOf(metric.key);
+                  return (
+                    <div
+                      key={metric.key}
                       style={{
                         display: 'flex', alignItems: 'center', gap: 'var(--space-sm)',
-                        padding: 'var(--space-sm) var(--space-md)',
-                        background: selectedCampaigns.includes(c.id) ? 'var(--accent-primary-glow)' : 'var(--bg-glass)',
-                        border: `1px solid ${selectedCampaigns.includes(c.id) ? 'var(--border-accent)' : 'var(--border-color)'}`,
+                        padding: '8px var(--space-md)',
+                        background: isActive ? 'var(--accent-primary-glow)' : 'var(--bg-glass)',
+                        border: `1px solid ${isActive ? 'var(--border-accent)' : 'var(--border-color)'}`,
                         borderRadius: 'var(--radius-md)',
-                        cursor: 'pointer', fontSize: 14,
-                        transition: 'all var(--transition-fast)',
+                        transition: 'all 150ms ease',
+                        opacity: isActive ? 1 : 0.6,
                       }}
                     >
-                      <input
-                        type="checkbox"
-                        checked={selectedCampaigns.includes(c.id)}
-                        onChange={() => toggleCampaign(c.id)}
-                        style={{ accentColor: 'var(--accent-primary)' }}
-                      />
-                      <span style={{ flex: 1 }}>{c.name}</span>
-                      <span className={`badge ${c.platform === 'meta' ? 'badge-meta' : 'badge-google'}`}>
-                        {c.platform === 'meta' ? 'Meta' : 'Google'}
-                      </span>
-                    </label>
-                  ))}
+                      <button
+                        onClick={() => toggleMetric(metric.key)}
+                        style={{
+                          width: 22, height: 22, borderRadius: 4,
+                          background: isActive ? metric.color : 'var(--bg-glass)',
+                          border: `2px solid ${isActive ? metric.color : 'var(--border-color)'}`,
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          cursor: 'pointer', color: 'white', flexShrink: 0,
+                        }}
+                      >
+                        {isActive && <FiCheck size={12} />}
+                      </button>
+
+                      <div style={{ width: 28, height: 28, borderRadius: 6, background: `${metric.color}20`, color: metric.color, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                        <metric.icon size={14} />
+                      </div>
+
+                      <span style={{ flex: 1, fontSize: 14, fontWeight: isActive ? 600 : 400 }}>{metric.label}</span>
+
+                      {isActive && (
+                        <span style={{ fontSize: 11, color: 'var(--text-tertiary)', marginRight: 4 }}>#{order + 1}</span>
+                      )}
+
+                      {isActive && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                          <button className="btn" style={{ padding: '1px 4px', fontSize: 10, background: 'var(--bg-glass)', border: '1px solid var(--border-color)', borderRadius: 3, cursor: 'pointer', color: 'var(--text-secondary)' }} onClick={() => moveMetric(metric.key, 'up')} title="Mover para cima">
+                            <FiChevronUp size={12} />
+                          </button>
+                          <button className="btn" style={{ padding: '1px 4px', fontSize: 10, background: 'var(--bg-glass)', border: '1px solid var(--border-color)', borderRadius: 3, cursor: 'pointer', color: 'var(--text-secondary)' }} onClick={() => moveMetric(metric.key, 'down')} title="Mover para baixo">
+                            <FiChevronDown size={12} />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Campaign Selector */}
+            <div style={{ marginBottom: 'var(--space-lg)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                <label className="input-label">🎯 Campanhas ({selectedCampaigns.length} selecionadas)</label>
+                <div style={{ display: 'flex', gap: 'var(--space-sm)' }}>
+                  <button className="btn btn-sm btn-secondary" onClick={selectAllCampaigns}>Todas</button>
+                  <button className="btn btn-sm btn-secondary" onClick={selectNoneCampaigns}>Nenhuma</button>
                 </div>
               </div>
-
-              <div style={{ display: 'flex', gap: 'var(--space-sm)', justifyContent: 'flex-end' }}>
-                <button className="btn btn-secondary" onClick={() => setShowCreate(false)}>Cancelar</button>
-                <button className="btn btn-primary btn-lg" onClick={handleGenerate} disabled={generating}>
-                  {generating ? <><div className="spinner" /> Gerando PDF...</> : <><FiDownload /> Gerar Relatório</>}
-                </button>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: 'var(--space-sm)' }}>
+                {mockCampaigns.map(c => (
+                  <label key={c.id} style={{
+                    display: 'flex', alignItems: 'center', gap: 'var(--space-sm)',
+                    padding: '8px 12px',
+                    background: selectedCampaigns.includes(c.id) ? 'var(--accent-primary-glow)' : 'var(--bg-glass)',
+                    border: `1px solid ${selectedCampaigns.includes(c.id) ? 'var(--border-accent)' : 'var(--border-color)'}`,
+                    borderRadius: 'var(--radius-md)', cursor: 'pointer', fontSize: 13,
+                  }}>
+                    <input type="checkbox" checked={selectedCampaigns.includes(c.id)} onChange={() => toggleCampaign(c.id)} style={{ accentColor: 'var(--accent-primary)' }} />
+                    <span style={{ flex: 1 }}>{c.name}</span>
+                    <span className={`badge ${c.platform === 'meta' ? 'badge-meta' : 'badge-google'}`} style={{ fontSize: 11 }}>
+                      {c.platform === 'meta' ? 'Meta' : 'Google'}
+                    </span>
+                  </label>
+                ))}
               </div>
+            </div>
+
+            {/* Actions */}
+            <div style={{ display: 'flex', gap: 'var(--space-sm)', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+              <button className="btn btn-secondary" onClick={() => setShowPreview(!showPreview)}>
+                <FiEye /> Preview
+              </button>
+              <button className="btn btn-secondary" onClick={() => setShowCreate(false)}>Cancelar</button>
+              <button className="btn btn-primary btn-lg" onClick={handleGenerate} disabled={generating || selectedMetrics.length === 0}>
+                {generating ? <><div className="spinner" /> Gerando...</> : <><FiDownload /> Gerar Relatório</>}
+              </button>
             </div>
           </div>
         )}
 
-        {/* Reports List */}
+        {/* Report Preview */}
+        {showPreview && selectedMetrics.length > 0 && (
+          <div className="card" style={{ marginBottom: 'var(--space-xl)', padding: 'var(--space-lg)' }}>
+            <div className="section-header">
+              <div>
+                <h3 className="section-title">📋 Preview do Relatório</h3>
+                <p className="section-subtitle">{reportName || 'Relatório'} — {PERIOD_OPTIONS.find(p => p.key === selectedPeriod)?.label || 'Período personalizado'}</p>
+              </div>
+              <button className="btn btn-sm btn-secondary" onClick={() => setShowPreview(false)}><FiX size={14} /></button>
+            </div>
+
+            {/* KPI Summary */}
+            <div className="kpi-grid" style={{ marginBottom: 'var(--space-lg)' }}>
+              {activeMetrics.map(m => (
+                <div key={m.key} className="kpi-card" style={{ padding: 'var(--space-md)' }}>
+                  <div className="kpi-card-header">
+                    <span className="kpi-card-label">{m.label}</span>
+                    <div className="kpi-card-icon" style={{ background: `${m.color}15`, color: m.color, width: 28, height: 28 }}>
+                      <m.icon size={14} />
+                    </div>
+                  </div>
+                  <div className="kpi-card-value" style={{ fontSize: 20 }}>{m.format(totals[m.key])}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Per-Campaign Table (desktop) */}
+            <div className="table-container desktop-only">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Campanha</th>
+                    <th>Plataforma</th>
+                    {activeMetrics.map(m => <th key={m.key}>{m.shortLabel}</th>)}
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredCampaigns.map(c => (
+                    <tr key={c.id}>
+                      <td style={{ fontWeight: 600 }}>{c.name}</td>
+                      <td>
+                        <span className={`badge ${c.platform === 'meta' ? 'badge-meta' : 'badge-google'}`}>
+                          {c.platform === 'meta' ? 'Meta' : 'Google'}
+                        </span>
+                      </td>
+                      {activeMetrics.map(m => (
+                        <td key={m.key} style={{
+                          fontWeight: m.key === 'roas' ? 700 : 400,
+                          color: m.key === 'roas' ? (m.getValue(c) >= 3 ? 'var(--success)' : m.getValue(c) >= 2 ? 'var(--warning)' : 'var(--danger)') : undefined,
+                        }}>
+                          {m.format(m.getValue(c))}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                  <tr style={{ fontWeight: 700, borderTop: '2px solid var(--border-color)' }}>
+                    <td>Total / Média</td>
+                    <td>—</td>
+                    {activeMetrics.map(m => (
+                      <td key={m.key} style={{ color: 'var(--accent-primary)' }}>{m.format(totals[m.key])}</td>
+                    ))}
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile cards */}
+            <div className="mobile-only">
+              {filteredCampaigns.map(c => (
+                <div key={c.id} className="mobile-campaign-card">
+                  <div className="mobile-campaign-card-header">
+                    <div>
+                      <div className="mobile-campaign-card-name">{c.name}</div>
+                    </div>
+                    <span className={`badge ${c.platform === 'meta' ? 'badge-meta' : 'badge-google'}`}>
+                      {c.platform === 'meta' ? 'Meta' : 'Google'}
+                    </span>
+                  </div>
+                  <div className="mobile-campaign-card-metrics">
+                    {activeMetrics.slice(0, 6).map(m => (
+                      <div key={m.key} className="mobile-metric">
+                        <div className="mobile-metric-label">{m.shortLabel}</div>
+                        <div className="mobile-metric-value" style={{
+                          color: m.key === 'roas' ? (m.getValue(c) >= 3 ? 'var(--success)' : 'var(--warning)') : undefined,
+                        }}>
+                          {m.format(m.getValue(c))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Saved Reports List */}
+        <div className="section-header">
+          <h2 className="section-title">Relatórios Salvos</h2>
+        </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-md)' }}>
-          {reports.map(report => (
-            <div key={report.id} className="card" style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              padding: 'var(--space-lg)',
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-lg)' }}>
+          {savedReports.map(report => (
+            <div key={report.id} className="card list-card" style={{ padding: 'var(--space-lg)' }}>
+              <div className="list-card-info">
                 <div style={{
-                  width: 48, height: 48,
+                  width: 44, height: 44,
                   background: 'var(--accent-primary-glow)',
                   borderRadius: 'var(--radius-md)',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  color: 'var(--accent-primary)', fontSize: 22,
+                  color: 'var(--accent-primary)', fontSize: 20, flexShrink: 0,
                 }}>
                   <FiFileText />
                 </div>
-                <div>
-                  <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 2 }}>{report.name}</h3>
-                  <div style={{ display: 'flex', gap: 'var(--space-lg)' }}>
+                <div style={{ minWidth: 0 }}>
+                  <h3 style={{ fontSize: 14, fontWeight: 700, marginBottom: 2 }}>{report.name}</h3>
+                  <div className="list-card-meta">
                     <span className="text-sm text-secondary" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                      <FiCalendar size={12} /> {report.period}
+                      <FiCalendar size={11} /> {report.period}
                     </span>
-                    <span className="text-sm text-secondary">
-                      {report.campaigns} campanhas
-                    </span>
-                    <span className="text-sm text-secondary">
-                      Criado em {new Date(report.createdAt).toLocaleDateString('pt-BR')}
-                    </span>
+                    <span className="text-sm text-secondary">{report.metrics.length} métricas</span>
+                    <span className="text-sm text-secondary">{report.campaigns.length} campanhas</span>
                   </div>
                 </div>
               </div>
-              <div style={{ display: 'flex', gap: 'var(--space-sm)' }}>
-                <button className="btn btn-secondary btn-sm">
-                  <FiEye size={14} /> Visualizar
-                </button>
-                <button className="btn btn-primary btn-sm">
-                  <FiDownload size={14} /> PDF
-                </button>
-                <button className="btn btn-secondary btn-sm">
-                  <FiSend size={14} /> Enviar
-                </button>
+              <div className="list-card-actions">
+                <button className="btn btn-secondary btn-sm"><FiEye size={14} /> Ver</button>
+                <button className="btn btn-primary btn-sm"><FiDownload size={14} /> PDF</button>
+                <button className="btn btn-secondary btn-sm"><FiSend size={14} /></button>
               </div>
             </div>
           ))}
