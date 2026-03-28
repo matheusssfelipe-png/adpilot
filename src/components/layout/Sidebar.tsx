@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useState, useMemo } from 'react';
 import { 
   FiHome, FiTarget, FiImage, FiBarChart2, FiFileText, 
@@ -27,10 +27,23 @@ const navItems = [
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const router = useRouter();
   const { isOpen, close } = useMobileMenu();
   const { accounts, selectedAccount, switchAccount } = useAdAccount();
   const [accountDropdownOpen, setAccountDropdownOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [loggingOut, setLoggingOut] = useState(false);
+
+  async function handleLogout() {
+    setLoggingOut(true);
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' });
+      router.push('/login');
+      router.refresh();
+    } catch {
+      window.location.href = '/login';
+    }
+  }
 
   // Filter accounts by search query
   const filteredAccounts = useMemo(() => {
@@ -179,9 +192,9 @@ export default function Sidebar() {
           <span className="sidebar-link-icon"><FiSettings /></span>
           <span>Configurações</span>
         </Link>
-        <button className="sidebar-link" style={{ color: 'var(--danger)' }}>
+        <button className="sidebar-link" style={{ color: 'var(--danger)' }} onClick={handleLogout} disabled={loggingOut}>
           <span className="sidebar-link-icon"><FiLogOut /></span>
-          <span>Sair</span>
+          <span>{loggingOut ? 'Saindo...' : 'Sair'}</span>
         </button>
       </div>
     </aside>

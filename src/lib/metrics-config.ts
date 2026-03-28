@@ -60,6 +60,18 @@ export const ALL_METRICS: MetricConfig[] = [
     getValue: (c) => c.conversions,
   },
   {
+    key: 'leads', label: 'Leads', shortLabel: 'Leads',
+    icon: FiTarget, color: '#ec4899', aggregate: 'sum',
+    format: (v) => v.toLocaleString('pt-BR'),
+    getValue: (c) => c.leads || 0,
+  },
+  {
+    key: 'cpl', label: 'Custo por Lead', shortLabel: 'CPL',
+    icon: FiDollarSign, color: '#f43f5e', aggregate: 'avg',
+    format: (v) => `R$ ${v.toFixed(2)}`,
+    getValue: (c) => c.cpl || 0,
+  },
+  {
     key: 'roas', label: 'ROAS', shortLabel: 'ROAS',
     icon: FiTrendingUp, color: '#10b981', aggregate: 'avg',
     format: (v) => v > 0 ? `${v.toFixed(1)}x` : '—',
@@ -82,13 +94,14 @@ export function calcTotals(campaigns: Campaign[], metrics: MetricConfig[]): Reco
 }
 
 /** Default metrics for dashboard */
-export const DEFAULT_DASHBOARD_METRICS = ['spend', 'impressions', 'clicks', 'ctr', 'conversions', 'roas'];
+export const DEFAULT_DASHBOARD_METRICS = ['spend', 'impressions', 'clicks', 'leads', 'conversions', 'roas'];
 
 /** Period options */
 export const PERIOD_OPTIONS = [
-  { key: '7d', label: 'Últimos 7 dias' },
-  { key: '14d', label: 'Últimos 14 dias' },
-  { key: '30d', label: 'Últimos 30 dias' },
-  { key: '90d', label: 'Últimos 90 dias' },
-  { key: 'custom', label: 'Personalizado' },
+  { key: 'today', label: 'Hoje' },
+  { key: 'yesterday', label: 'Ontem' },
+  { key: 'last_7d', label: '7 dias' },
+  { key: 'last_14d', label: '14 dias' },
+  { key: 'last_30d', label: '30 dias' },
+  { key: 'last_90d', label: '90 dias' },
 ];

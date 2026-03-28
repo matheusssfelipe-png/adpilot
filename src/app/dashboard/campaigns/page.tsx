@@ -5,7 +5,9 @@ import Header from '@/components/layout/Header';
 import { mockCampaigns, Campaign, CampaignStatus, Platform } from '@/lib/mock-data';
 import { useAdAccount } from '@/lib/AdAccountContext';
 import { useRealCampaigns } from '@/lib/useRealCampaigns';
-import { FiPlay, FiPause, FiEdit2, FiPlus, FiSearch, FiX, FiWifi, FiRefreshCw } from 'react-icons/fi';
+import { useAdSets } from '@/lib/useAdSets';
+import { useAds } from '@/lib/useAds';
+import { FiPlay, FiPause, FiEdit2, FiPlus, FiSearch, FiX, FiWifi, FiRefreshCw, FiChevronRight } from 'react-icons/fi';
 
 const statusLabels: Record<string, string> = {
   ACTIVE: 'Ativa',
@@ -27,7 +29,15 @@ const statusClass: Record<string, string> = {
 
 export default function CampaignsPage() {
   const { selectedAccount } = useAdAccount();
-  const { campaigns: realCampaigns, loading, isRealData, refetch } = useRealCampaigns();
+  const [selectedPeriod, setSelectedPeriod] = useState('last_30d');
+  
+  // View state
+  const [selectedCampaign, setSelectedCampaign] = useState<{ id: string, name: string } | null>(null);
+  const [selectedAdSet, setSelectedAdSet] = useState<{ id: string, name: string } | null>(null);
+
+  const { campaigns: realCampaigns, loading: campaignsLoading, isRealData, refetch: refetchCampaigns } = useRealCampaigns(selectedPeriod);
+  const { adSets: realAdSets, loading: adSetsLoading, refetch: refetchAdSets } = useAdSets(selectedCampaign?.id || null, selectedPeriod);
+  const { ads: realAds, loading: adsLoading, refetch: refetchAds } = useAds(selectedAdSet?.id || null, selectedPeriod);
   
   // Build unified campaign list
   const allCampaigns = useMemo(() => {
@@ -62,11 +72,50 @@ export default function CampaignsPage() {
     return true;
   });
 
-  const toggleStatus = (id: string) => {
+  const toggleStatus = async (id: string, platform: string) => {
+    const campaignToToggle = campaigns.find(c => c.id === id);
+    if (!campaignToToggle) return;
+
+    const newStatus = campaignToToggle.status === 'ACTIVE' ? 'PAUSED' : 'ACTIVE';
+
+    // Optimistic UI update
     setCampaigns(prev => prev.map(c => {
       if (c.id !== id) return c;
-      return { ...c, status: c.status === 'ACTIVE' ? 'PAUSED' : 'ACTIVE' };
+      return { ...c, status: newStatus };
     }));
+
+    if (isRealData && platform === 'meta') {
+      try {
+        const token = localStorage.getItem('meta_access_token');
+        const res = await fetch('/api/meta/campaigns/status', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            campaignId: id,
+            status: newStatus,
+            token,
+          }),
+        });
+        
+        const data = await res.json();
+        if (!data.success) {
+          // Revert on failure
+          console.error(data.error);
+          alert(`Erro ao alterar status no Meta: ${data.error}`);
+          setCampaigns(prev => prev.map(c => {
+            if (c.id !== id) return c;
+            return { ...c, status: campaignToToggle.status };
+          }));
+        }
+      } catch (err) {
+        console.error(err);
+        // Revert on failure
+        setCampaigns(prev => prev.map(c => {
+          if (c.id !== id) return c;
+          return { ...c, status: campaignToToggle.status };
+        }));
+      }
+    }
   };
 
   return (
@@ -74,7 +123,7 @@ export default function CampaignsPage() {
       <Header title="Campanhas" subtitle="Gerencie todas as suas campanhas" />
       <div className="page-content">
         {/* Toolbar */}
-        <div className="toolbar">
+        <div className="toolbar" style={{ flexWrap: 'wrap' }}>
           <div className="toolbar-search">
             <FiSearch className="toolbar-search-icon" />
             <input
@@ -98,57 +147,114 @@ export default function CampaignsPage() {
             <option value="PAUSED">Pausadas</option>
             <option value="DRAFT">Rascunho</option>
           </select>
+          
+          <select className="input" value={selectedPeriod} onChange={e => setSelectedPeriod(e.target.value)}>
+            <option value="today">Hoje</option>
+            <option value="yesterday">Ontem</option>
+            <option value="last_7d">Últimos 7 dias</option>
+            <option value="last_14d">Últimos 14 dias</option>
+            <option value="last_30d">Últimos 30 dias</option>
+            <option value="last_90d">Últimos 90 dias</option>
+          </select>
+
+          {isRealData && (
+             <button 
+               onClick={() => selectedAdSet ? refetchAds() : selectedCampaign ? refetchAdSets() : refetchCampaigns()} 
+               className="btn btn-secondary" title="Atualizar dados">
+               <FiRefreshCw className={(selectedAdSet ? adsLoading : selectedCampaign ? adSetsLoading : campaignsLoading) ? 'spin' : ''} />
+             </button>
+          )}
 
           <button className="btn btn-primary" onClick={() => setShowCreateModal(true)}>
-            <FiPlus /> Nova Campanha
+            <FiPlus /> Nova
           </button>
         </div>
+
+        {/* Breadcrumbs */}
+        {(selectedCampaign || selectedAdSet) && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, fontSize: 14 }}>
+            <span style={{ cursor: 'pointer', color: 'var(--text-secondary)' }} onClick={() => { setSelectedCampaign(null); setSelectedAdSet(null); }}>
+              Campanhas
+            </span>
+            <FiChevronRight size={14} color="var(--text-tertiary)" />
+            
+            {selectedCampaign && !selectedAdSet && (
+              <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{selectedCampaign.name}</span>
+            )}
+            
+            {selectedCampaign && selectedAdSet && (
+              <>
+                <span style={{ cursor: 'pointer', color: 'var(--text-secondary)' }} onClick={() => setSelectedAdSet(null)}>
+                  {selectedCampaign.name}
+                </span>
+                <FiChevronRight size={14} color="var(--text-tertiary)" />
+                <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{selectedAdSet.name}</span>
+              </>
+            )}
+          </div>
+        )}
 
         {/* Desktop: Table */}
         <div className="table-container desktop-only">
           <table>
             <thead>
               <tr>
-                <th>Campanha</th>
-                <th>Plataforma</th>
+                <th>{selectedAdSet ? 'Anúncio' : selectedCampaign ? 'Conjunto de Anúncios' : 'Campanha'}</th>
+                {!selectedCampaign && <th>Plataforma</th>}
                 <th>Status</th>
                 <th>Orçamento</th>
                 <th>Gasto</th>
                 <th>Impressões</th>
-                <th>Cliques</th>
                 <th>CTR</th>
                 <th>CPC</th>
+                <th>Leads</th>
+                <th>CPL</th>
                 <th>Conv.</th>
                 <th>ROAS</th>
                 <th>Ações</th>
               </tr>
             </thead>
             <tbody>
-              {filtered.map(c => (
+              {(selectedAdSet ? realAds : selectedCampaign ? realAdSets : filtered).map((c: any) => (
                 <tr key={c.id}>
                   <td>
-                    <div>
-                      <div style={{ fontWeight: 600, marginBottom: 2 }}>{c.name}</div>
-                      <div className="text-sm text-secondary">{c.objective}</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      {isRealData && <FiWifi size={12} color="var(--accent-primary)" title="Dados Reais" />}
+                      <div>
+                        <div 
+                           style={{ fontWeight: 600, marginBottom: 2, cursor: 'pointer', color: 'var(--text-primary)' }} 
+                           className="hover:text-accent transition-colors"
+                           onClick={() => {
+                             if (!selectedCampaign) setSelectedCampaign({ id: c.id, name: c.name });
+                             else if (!selectedAdSet) setSelectedAdSet({ id: c.id, name: c.name });
+                           }}
+                        >
+                          {c.name}
+                        </div>
+                        <div className="text-sm text-secondary">{c.objective || (selectedAdSet ? 'Anúncio' : 'Conjunto')}</div>
+                      </div>
                     </div>
                   </td>
+                  {!selectedCampaign && (
+                    <td>
+                      <span className={`badge ${c.platform === 'meta' ? 'badge-meta' : 'badge-google'}`}>
+                        {c.platform === 'meta' ? 'Meta' : 'Google'}
+                      </span>
+                    </td>
+                  )}
                   <td>
-                    <span className={`badge ${c.platform === 'meta' ? 'badge-meta' : 'badge-google'}`}>
-                      {c.platform === 'meta' ? 'Meta' : 'Google'}
-                    </span>
-                  </td>
-                  <td>
-                    <span className={`badge ${statusClass[c.status]}`}>
+                    <span className={`badge ${statusClass[c.status] || 'badge-draft'}`}>
                       <span className="badge-dot" />
-                      {statusLabels[c.status]}
+                      {statusLabels[c.status] || c.status}
                     </span>
                   </td>
                   <td>R$ {c.budget.toLocaleString('pt-BR')}</td>
                   <td>R$ {c.spend.toLocaleString('pt-BR')}</td>
                   <td>{c.impressions.toLocaleString('pt-BR')}</td>
-                  <td>{c.clicks.toLocaleString('pt-BR')}</td>
                   <td>{c.ctr}%</td>
                   <td>R$ {c.cpc.toFixed(2)}</td>
+                  <td>{c.leads.toLocaleString('pt-BR')}</td>
+                  <td>R$ {c.cpl.toFixed(2)}</td>
                   <td>{c.conversions.toLocaleString('pt-BR')}</td>
                   <td style={{ color: c.roas >= 3 ? 'var(--success)' : c.roas >= 2 ? 'var(--warning)' : 'var(--danger)', fontWeight: 700 }}>
                     {c.roas > 0 ? `${c.roas}x` : '—'}
@@ -157,7 +263,7 @@ export default function CampaignsPage() {
                     <div style={{ display: 'flex', gap: 4 }}>
                       <button
                         className={`btn btn-sm ${c.status === 'ACTIVE' ? 'btn-danger' : 'btn-success'}`}
-                        onClick={() => toggleStatus(c.id)}
+                        onClick={() => toggleStatus(c.id, c.platform)}
                         title={c.status === 'ACTIVE' ? 'Pausar' : 'Ativar'}
                       >
                         {c.status === 'ACTIVE' ? <FiPause size={14} /> : <FiPlay size={14} />}
@@ -175,21 +281,33 @@ export default function CampaignsPage() {
 
         {/* Mobile: Campaign Cards */}
         <div className="mobile-only">
-          {filtered.map(c => (
+          {(selectedAdSet ? realAds : selectedCampaign ? realAdSets : filtered).map((c: any) => (
             <div key={c.id} className="mobile-campaign-card">
               <div className="mobile-campaign-card-header">
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div className="mobile-campaign-card-name">{c.name}</div>
-                  <div className="mobile-campaign-card-objective">{c.objective}</div>
+                  <div 
+                     className="mobile-campaign-card-name"
+                     style={{ cursor: 'pointer', color: 'var(--text-primary)' }}
+                     onClick={() => {
+                       if (!selectedCampaign) setSelectedCampaign({ id: c.id, name: c.name });
+                       else if (!selectedAdSet) setSelectedAdSet({ id: c.id, name: c.name });
+                     }}
+                  >
+                    {isRealData && <FiWifi size={10} color="var(--accent-primary)" style={{ marginRight: 4 }} />}
+                    {c.name}
+                  </div>
+                  <div className="mobile-campaign-card-objective">{c.objective || (selectedAdSet ? 'Anúncio' : 'Conjunto de Anúncios')}</div>
                 </div>
                 <div className="mobile-campaign-card-badges">
-                  <span className={`badge ${statusClass[c.status]}`}>
+                  <span className={`badge ${statusClass[c.status] || 'badge-draft'}`}>
                     <span className="badge-dot" />
-                    {statusLabels[c.status]}
+                    {statusLabels[c.status] || c.status}
                   </span>
-                  <span className={`badge ${c.platform === 'meta' ? 'badge-meta' : 'badge-google'}`}>
-                    {c.platform === 'meta' ? 'Meta' : 'Google'}
-                  </span>
+                  {!selectedCampaign && (
+                    <span className={`badge ${c.platform === 'meta' ? 'badge-meta' : 'badge-google'}`}>
+                      {c.platform === 'meta' ? 'Meta' : 'Google'}
+                    </span>
+                  )}
                 </div>
               </div>
               <div className="mobile-campaign-card-metrics">
@@ -212,8 +330,12 @@ export default function CampaignsPage() {
                   <div className="mobile-metric-value">R$ {c.cpc.toFixed(2)}</div>
                 </div>
                 <div className="mobile-metric">
-                  <div className="mobile-metric-label">Cliques</div>
-                  <div className="mobile-metric-value">{c.clicks.toLocaleString('pt-BR')}</div>
+                  <div className="mobile-metric-label">Leads</div>
+                  <div className="mobile-metric-value">{c.leads.toLocaleString('pt-BR')}</div>
+                </div>
+                <div className="mobile-metric">
+                  <div className="mobile-metric-label">CPL</div>
+                  <div className="mobile-metric-value">R$ {c.cpl.toFixed(2)}</div>
                 </div>
                 <div className="mobile-metric">
                   <div className="mobile-metric-label">Conv.</div>
@@ -223,7 +345,7 @@ export default function CampaignsPage() {
               <div className="mobile-campaign-card-actions">
                 <button
                   className={`btn btn-sm ${c.status === 'ACTIVE' ? 'btn-danger' : 'btn-success'}`}
-                  onClick={() => toggleStatus(c.id)}
+                  onClick={() => toggleStatus(c.id, c.platform)}
                 >
                   {c.status === 'ACTIVE' ? <><FiPause size={12} /> Pausar</> : <><FiPlay size={12} /> Ativar</>}
                 </button>

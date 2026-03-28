@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import Header from '@/components/layout/Header';
 import { mockCampaigns, Campaign } from '@/lib/mock-data';
 import {
@@ -102,19 +102,49 @@ const mockSavedReports: SavedReport[] = [
   },
 ];
 
+import { useAdAccount } from '@/lib/AdAccountContext';
+import { useRealCampaigns } from '@/lib/useRealCampaigns';
+
+// ... other code ...
+
 export default function ReportsPage() {
+  const { selectedAccount } = useAdAccount();
+  
   // Report config state
   const [showCreate, setShowCreate] = useState(false);
   const [reportName, setReportName] = useState('');
-  const [selectedPeriod, setSelectedPeriod] = useState('30d');
+  const [selectedPeriod, setSelectedPeriod] = useState('last_30d');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [selectedMetrics, setSelectedMetrics] = useState<string[]>(
     ['spend', 'impressions', 'clicks', 'ctr', 'conversions', 'roas']
   );
-  const [selectedCampaigns, setSelectedCampaigns] = useState<string[]>(
-    mockCampaigns.filter(c => c.status === 'ACTIVE').map(c => c.id)
-  );
+
+  const { campaigns: realCampaigns, loading, isRealData, refetch } = useRealCampaigns(selectedPeriod);
+
+  // Build unified campaign list
+  const accountCampaigns = useMemo(() => {
+    if (isRealData && realCampaigns.length > 0) {
+      return realCampaigns.map(c => ({
+        ...c,
+        status: c.status as any,
+        platform: c.platform as 'meta' | 'google',
+        startDate: c.startDate || new Date().toISOString(),
+        endDate: c.stopDate || new Date().toISOString(),
+      }));
+    }
+    return selectedAccount
+      ? mockCampaigns.filter(c => c.accountId === selectedAccount.id)
+      : mockCampaigns;
+  }, [selectedAccount, realCampaigns, isRealData]);
+
+  const [selectedCampaigns, setSelectedCampaigns] = useState<string[]>([]);
+  
+  useEffect(() => {
+    // Select active campaigns by default when account changes
+    setSelectedCampaigns(accountCampaigns.filter(c => c.status === 'ACTIVE').map(c => c.id));
+  }, [accountCampaigns]);
+
   const [savedReports, setSavedReports] = useState<SavedReport[]>(mockSavedReports);
   const [generating, setGenerating] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
@@ -126,8 +156,8 @@ export default function ReportsPage() {
   );
 
   const filteredCampaigns = useMemo(
-    () => mockCampaigns.filter(c => selectedCampaigns.includes(c.id)),
-    [selectedCampaigns]
+    () => accountCampaigns.filter(c => selectedCampaigns.includes(c.id)),
+    [accountCampaigns, selectedCampaigns]
   );
 
   // Metric toggle
@@ -313,12 +343,12 @@ export default function ReportsPage() {
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
                 <label className="input-label">🎯 Campanhas ({selectedCampaigns.length} selecionadas)</label>
                 <div style={{ display: 'flex', gap: 'var(--space-sm)' }}>
-                  <button className="btn btn-sm btn-secondary" onClick={selectAllCampaigns}>Todas</button>
-                  <button className="btn btn-sm btn-secondary" onClick={selectNoneCampaigns}>Nenhuma</button>
+                  <button className="btn btn-sm btn-secondary" onClick={() => setSelectedCampaigns(accountCampaigns.map(c => c.id))}>Todas</button>
+                  <button className="btn btn-sm btn-secondary" onClick={() => setSelectedCampaigns([])}>Nenhuma</button>
                 </div>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: 'var(--space-sm)' }}>
-                {mockCampaigns.map(c => (
+                {accountCampaigns.map(c => (
                   <label key={c.id} style={{
                     display: 'flex', alignItems: 'center', gap: 'var(--space-sm)',
                     padding: '8px 12px',

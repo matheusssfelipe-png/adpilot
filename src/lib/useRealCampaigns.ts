@@ -17,12 +17,14 @@ export interface RealCampaign {
   ctr: number;
   cpc: number;
   conversions: number;
+  leads: number;
+  cpl: number;
   roas: number;
   startDate?: string;
   stopDate?: string;
 }
 
-export function useRealCampaigns() {
+export function useRealCampaigns(datePreset: string = 'last_30d') {
   const { selectedAccount, metaConnected } = useAdAccount();
   const [campaigns, setCampaigns] = useState<RealCampaign[]>([]);
   const [loading, setLoading] = useState(false);
@@ -39,7 +41,7 @@ export function useRealCampaigns() {
       setLoading(true);
       setError(null);
       try {
-        const res = await fetch(`/api/meta/campaigns?accountId=${selectedAccount.id}&token=${token}`);
+        const res = await fetch(`/api/meta/campaigns?accountId=${selectedAccount.id}&token=${token}&datePreset=${datePreset}`);
         const data = await res.json();
         
         if (data.success && data.campaigns) {
@@ -62,7 +64,7 @@ export function useRealCampaigns() {
       setCampaigns([]);
       setIsRealData(false);
     }
-  }, [selectedAccount, metaConnected]);
+  }, [selectedAccount, metaConnected, datePreset]);
 
   useEffect(() => {
     fetchCampaigns();

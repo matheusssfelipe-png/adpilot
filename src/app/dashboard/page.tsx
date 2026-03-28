@@ -40,9 +40,11 @@ function generateChartData(accountId: string) {
 
 export default function DashboardPage() {
   const { selectedAccount } = useAdAccount();
-  const { campaigns: realCampaigns, loading, isRealData, refetch } = useRealCampaigns();
   const [selectedMetrics, setSelectedMetrics] = useState<string[]>(DEFAULT_DASHBOARD_METRICS);
-  const [selectedPeriod, setSelectedPeriod] = useState('30d');
+  const [selectedPeriod, setSelectedPeriod] = useState('last_30d');
+  
+  // Pass selectedPeriod to hook so it refetches when period changes
+  const { campaigns: realCampaigns, loading, isRealData, refetch } = useRealCampaigns(selectedPeriod);
 
   // Use real campaigns if available, otherwise mock
   const accountCampaigns = useMemo(() => {
@@ -62,6 +64,8 @@ export default function DashboardPage() {
         ctr: c.ctr,
         cpc: c.cpc,
         conversions: c.conversions,
+        leads: c.leads,
+        cpl: c.cpl,
         roas: c.roas,
         startDate: c.startDate || new Date().toISOString(),
         endDate: c.stopDate || new Date().toISOString(),

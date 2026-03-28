@@ -2,38 +2,36 @@ import { NextRequest, NextResponse } from 'next/server';
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
-  const accountId = searchParams.get('accountId');
+  const adsetId = searchParams.get('adsetId');
   const token = searchParams.get('token');
   const datePreset = searchParams.get('datePreset') || 'last_30d';
 
-  if (!accountId || !token) {
+  if (!adsetId || !token) {
     return NextResponse.json(
-      { error: 'accountId and token are required' },
+      { error: 'adsetId and token are required' },
       { status: 400 }
     );
   }
 
   try {
-    // Fetch campaigns with insights for this ad account
-    const campaignsUrl = `https://graph.facebook.com/v21.0/${accountId}/campaigns?fields=id,name,status,objective,daily_budget,lifetime_budget,start_time,stop_time,insights.date_preset(${datePreset}){spend,impressions,clicks,cpc,ctr,conversions,actions,cost_per_action_type}&limit=100&access_token=${token}`;
+    const url = `https://graph.facebook.com/v21.0/${adsetId}/ads?fields=id,name,status,insights.date_preset(${datePreset}){spend,impressions,clicks,cpc,ctr,conversions,actions}&limit=100&access_token=${token}`;
     
-    const res = await fetch(campaignsUrl);
+    const res = await fetch(url);
     const data = await res.json();
 
     if (data.error) {
-      console.error('Meta campaigns error:', data.error);
+      console.error('Meta ads error:', data.error);
       return NextResponse.json({ error: data.error.message }, { status: 400 });
     }
 
-    const campaigns = (data.data || []).map((camp: any) => {
-      const insights = camp.insights?.data?.[0] || {};
+    const ads = (data.data || []).map((ad: any) => {
+      const insights = ad.insights?.data?.[0] || {};
       const spend = parseFloat(insights.spend || '0');
       const impressions = parseInt(insights.impressions || '0');
       const clicks = parseInt(insights.clicks || '0');
       const ctr = parseFloat(insights.ctr || '0');
       const cpc = parseFloat(insights.cpc || '0');
       
-      // Extract conversions from actions
       let conversions = 0;
       let leads = 0;
 
@@ -53,17 +51,14 @@ export async function GET(request: NextRequest) {
         leads = leadAction ? parseInt(leadAction.value || '0') : 0;
       }
 
-      const roas = spend > 0 && conversions > 0 ? (conversions * 50) / spend : 0; // Rough estimate
+      const roas = spend > 0 && conversions > 0 ? (conversions * 50) / spend : 0;
       const cpl = leads > 0 ? spend / leads : 0;
 
       return {
-        id: camp.id,
-        name: camp.name,
-        status: camp.status, // ACTIVE, PAUSED, DELETED, ARCHIVED
-        objective: camp.objective || 'UNKNOWN',
-        platform: 'meta',
-        accountId: accountId,
-        budget: parseFloat(camp.daily_budget || camp.lifetime_budget || '0') / 100, // Meta returns in cents
+        id: ad.id,
+        name: ad.name,
+        status: ad.status,
+        adsetId,
         spend,
         impressions,
         clicks,
@@ -73,21 +68,11 @@ export async function GET(request: NextRequest) {
         leads,
         cpl,
         roas,
-        startDate: camp.start_time,
-        stopDate: camp.stop_time,
       };
     });
 
-    return NextResponse.json({
-      success: true,
-      campaigns,
-      total: campaigns.length,
-    });
+    return NextResponse.json({ success: true, ads });
   } catch (error: any) {
-    console.error('Meta campaigns fetch error:', error);
-    return NextResponse.json(
-      { error: error.message || 'Failed to fetch campaigns' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
