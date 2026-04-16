@@ -36,6 +36,7 @@ export function useClientCampaigns(options: UseClientCampaignsOptions = {}) {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [needsReauth, setNeedsReauth] = useState(false);
 
   const fetchCampaigns = useCallback(async () => {
     if (!selectedClient || !selectedClient.accounts.length) {
@@ -45,6 +46,7 @@ export function useClientCampaigns(options: UseClientCampaignsOptions = {}) {
 
     setLoading(true);
     setError(null);
+    setNeedsReauth(false);
 
     const allCampaigns: Campaign[] = [];
 
@@ -75,11 +77,21 @@ export function useClientCampaigns(options: UseClientCampaignsOptions = {}) {
           const res = await fetch(url);
           const data = await res.json();
 
+          if (data.needsReauth) {
+            setNeedsReauth(true);
+            setError(data.error || 'Token expirado. Vincule a conta novamente.');
+            return [];
+          }
+
           if (data.success && data.campaigns) {
             return data.campaigns.map((c: any) => ({
               ...c,
               clientAccountId: account.id,
             }));
+          }
+          
+          if (data.error) {
+            setError(data.error);
           }
           return [];
         } catch {
@@ -109,6 +121,7 @@ export function useClientCampaigns(options: UseClientCampaignsOptions = {}) {
     campaigns,
     loading,
     error,
+    needsReauth,
     refetch: fetchCampaigns,
     hasGoogleAccounts: selectedClient?.accounts.some(a => a.platform === 'google') || false,
     hasMetaAccounts: selectedClient?.accounts.some(a => a.platform === 'meta') || false,

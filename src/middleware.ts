@@ -9,6 +9,8 @@ const PUBLIC_PATHS = [
   '/api/auth/meta',
   '/api/auth/google',
   '/api/auth/tokens',
+  '/api/google/accounts/list',
+  '/api/clients',
   '/client/',
 ];
 

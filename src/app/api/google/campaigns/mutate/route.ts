@@ -4,7 +4,7 @@ import { clientAccounts } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { decrypt } from '@/lib/db/crypto';
 
-const GOOGLE_ADS_API = 'https://googleads.googleapis.com/v18';
+const GOOGLE_ADS_API = 'https://googleads.googleapis.com/v23';
 
 // POST /api/google/campaigns/mutate
 // Body: { clientAccountId, operations: [{ type, campaignId, ... }] }

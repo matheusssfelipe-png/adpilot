@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
 
   try {
     // Step 1: List all accessible customers
-    const listUrl = 'https://googleads.googleapis.com/v18/customers:listAccessibleCustomers';
+    const listUrl = 'https://googleads.googleapis.com/v23/customers:listAccessibleCustomers';
     const listResponse = await fetch(listUrl, {
       headers: {
         'Authorization': `Bearer ${token}`,
@@ -61,7 +61,7 @@ export async function GET(request: NextRequest) {
       // Try to get details but don't fail if we can't
       try {
         const queryResponse = await fetch(
-          `https://googleads.googleapis.com/v18/customers/${customerId}/googleAds:searchStream`,
+          `https://googleads.googleapis.com/v23/customers/${customerId}/googleAds:searchStream`,
           {
             method: 'POST',
             headers: {
@@ -144,7 +144,7 @@ export async function GET(request: NextRequest) {
     for (const mccId of managerIds) {
       try {
         const clientsResponse = await fetch(
-          `https://googleads.googleapis.com/v18/customers/${mccId}/googleAds:searchStream`,
+          `https://googleads.googleapis.com/v23/customers/${mccId}/googleAds:searchStream`,
           {
             method: 'POST',
             headers: {

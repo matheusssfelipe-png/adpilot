@@ -17,9 +17,18 @@ function getEncryptionKey(): string {
 // Derive a CryptoKey from the string key
 async function deriveKey(keyString: string): Promise<CryptoKey> {
   const encoder = new TextEncoder();
+  let encoded = encoder.encode(keyString);
+  
+  // Ensure exactly 32 bytes for AES-256
+  if (encoded.length < 32) {
+    const padded = new Uint8Array(32);
+    padded.set(encoded); // Pads with 0s at the end
+    encoded = padded;
+  }
+  
   const keyMaterial = await crypto.subtle.importKey(
     'raw',
-    encoder.encode(keyString).slice(0, 32), // Use first 32 bytes (256 bits)
+    encoded.slice(0, 32),
     { name: ALGORITHM },
     false,
     ['encrypt', 'decrypt']

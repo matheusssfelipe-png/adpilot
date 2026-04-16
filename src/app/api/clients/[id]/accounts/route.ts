@@ -16,8 +16,8 @@ export async function POST(
       platform,
       accountId,
       accountName,
-      accessToken,
-      refreshToken,
+      accessToken: bodyToken,
+      refreshToken: bodyRefresh,
       tokenExpiresAt,
       mccId,
       currency,
@@ -30,9 +30,31 @@ export async function POST(
       );
     }
 
+    // Use tokens from body, or fall back to cookies (from OAuth flow)
+    const accessToken = bodyToken
+      || request.cookies.get('google_link_token')?.value
+      || request.cookies.get('google_access_token')?.value;
+    const refreshToken = bodyRefresh
+      || request.cookies.get('google_link_refresh')?.value;
+    const cookieExpires = request.cookies.get('google_link_expires')?.value;
+
+    if (!accessToken) {
+      return NextResponse.json(
+        { error: 'Token de acesso não encontrado. Faça a autenticação Google novamente.' },
+        { status: 401 }
+      );
+    }
+
     // Encrypt tokens before storing
-    const encryptedAccess = accessToken ? await encrypt(accessToken) : null;
+    const encryptedAccess = await encrypt(accessToken);
     const encryptedRefresh = refreshToken ? await encrypt(refreshToken) : null;
+
+    // Calculate expiry
+    const expiresAt = tokenExpiresAt
+      ? new Date(tokenExpiresAt)
+      : cookieExpires
+        ? new Date(Date.now() + parseInt(cookieExpires) * 1000)
+        : new Date(Date.now() + 3600 * 1000);
 
     const [account] = await db.insert(clientAccounts).values({
       clientId,
@@ -41,13 +63,14 @@ export async function POST(
       accountName,
       accessToken: encryptedAccess,
       refreshToken: encryptedRefresh,
-      tokenExpiresAt: tokenExpiresAt ? new Date(tokenExpiresAt) : null,
-      mccId: mccId || null,
+      tokenExpiresAt: expiresAt,
+      mccId: mccId || process.env.GOOGLE_ADS_MCC_ID || null,
       currency: currency || 'BRL',
       status: 'active',
     }).returning();
 
-    return NextResponse.json({
+    // Clear temporary linking cookies
+    const response = NextResponse.json({
       success: true,
       account: {
         id: account.id,
@@ -59,6 +82,12 @@ export async function POST(
         status: account.status,
       },
     }, { status: 201 });
+
+    response.cookies.delete('google_link_token');
+    response.cookies.delete('google_link_refresh');
+    response.cookies.delete('google_link_expires');
+
+    return response;
   } catch (error: any) {
     console.error('Error linking account:', error);
     return NextResponse.json(
