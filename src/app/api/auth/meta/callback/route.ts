@@ -4,7 +4,7 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const code = searchParams.get('code');
   const error = searchParams.get('error');
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+  const appUrl = (process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000').trim();
 
   if (error) {
     return NextResponse.redirect(`${appUrl}/dashboard/settings?error=meta_denied`);
@@ -15,8 +15,8 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const appId = process.env.META_APP_ID;
-    const appSecret = process.env.META_APP_SECRET;
+    const appId = process.env.META_APP_ID?.trim();
+    const appSecret = process.env.META_APP_SECRET?.trim();
     const redirectUri = `${appUrl}/api/auth/meta/callback`;
 
     // Exchange code for access token
@@ -40,9 +40,17 @@ export async function GET(request: NextRequest) {
 
     const accountsData = await accountsResponse.json();
 
-    // In a real app, save tokens to database here
-    // For now, redirect with success and token so frontend can use it
-    return NextResponse.redirect(`${appUrl}/dashboard/settings?success=meta&token=${accessToken}&accounts=${accountsData.data?.length || 0}`);
+    // Store token in HttpOnly cookie instead of exposing in URL
+    const redirectUrl = new URL(`${appUrl}/dashboard/settings?success=meta&accounts=${accountsData.data?.length || 0}`);
+    const response = NextResponse.redirect(redirectUrl);
+    response.cookies.set('meta_access_token', accessToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      path: '/',
+      maxAge: 60 * 60 * 24 * 60, // 60 days
+    });
+    return response;
   } catch (error: any) {
     console.error('Meta OAuth callback error:', error);
     return NextResponse.redirect(`${appUrl}/dashboard/settings?error=meta_failed`);

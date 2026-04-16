@@ -1,107 +1,314 @@
 'use client';
 
-import { useState } from 'react';
+import React, { useState } from 'react';
 import Header from '@/components/layout/Header';
-import { FiUsers, FiPlus, FiLink, FiCopy, FiCheck, FiTrash2, FiExternalLink, FiX } from 'react-icons/fi';
+import { useClient } from '@/lib/ClientContext';
+import { FiPlus, FiTrash2, FiLink, FiChevronRight, FiSearch, FiUser, FiX, FiSettings } from 'react-icons/fi';
 
-interface Client {
-  id: string;
-  name: string;
-  email: string;
-  company: string;
-  accessToken: string;
-  createdAt: string;
-  lastAccess?: string;
-}
-
-const mockClients: Client[] = [
-  { id: '1', name: 'João Silva', email: 'joao@empresa.com', company: 'Empresa ABC', accessToken: 'abc123def456', createdAt: '2026-03-01', lastAccess: '2026-03-25' },
-  { id: '2', name: 'Maria Santos', email: 'maria@loja.com', company: 'Loja XYZ', accessToken: 'xyz789ghi012', createdAt: '2026-03-10', lastAccess: '2026-03-24' },
-  { id: '3', name: 'Pedro Costa', email: 'pedro@tech.com', company: 'Tech Solutions', accessToken: 'tech345sol678', createdAt: '2026-03-18' },
+const AVATAR_COLORS = [
+  '#6366f1', '#8b5cf6', '#ec4899', '#f43f5e',
+  '#f97316', '#eab308', '#22c55e', '#06b6d4',
+  '#3b82f6', '#a855f7', '#14b8a6', '#64748b',
 ];
 
 export default function ClientsPage() {
-  const [clients, setClients] = useState<Client[]>(mockClients);
+  const {
+    clients, selectedClient, selectClient,
+    isLoading, createClient, deleteClient,
+  } = useClient();
   const [showCreate, setShowCreate] = useState(false);
-  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [newName, setNewName] = useState('');
+  const [newColor, setNewColor] = useState(AVATAR_COLORS[0]);
+  const [search, setSearch] = useState('');
+  const [creating, setCreating] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [showConfig, setShowConfig] = useState<string | null>(null);
 
-  const copyLink = (token: string, id: string) => {
-    navigator.clipboard.writeText(`${window.location.origin}/client/${token}`);
-    setCopiedId(id);
-    setTimeout(() => setCopiedId(null), 2000);
+  const filtered = search
+    ? clients.filter(c => c.name.toLowerCase().includes(search.toLowerCase()))
+    : clients;
+
+  const handleCreate = async () => {
+    if (!newName.trim() || creating) return;
+    setCreating(true);
+    const result = await createClient(newName, newColor);
+    if (result) {
+      setNewName('');
+      setShowCreate(false);
+      setShowConfig(result.id); // Open config for new client
+    }
+    setCreating(false);
+  };
+
+  const handleDelete = async (id: string) => {
+    await deleteClient(id);
+    setConfirmDelete(null);
   };
 
   return (
     <>
-      <Header title="Clientes" subtitle="Gerencie o acesso dos seus clientes" />
-      <div className="page-content">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-xl)' }}>
-          <p className="text-secondary">{clients.length} clientes cadastrados</p>
-          <button className="btn btn-primary" onClick={() => setShowCreate(!showCreate)}>
-            <FiPlus /> Novo Cliente
+      <Header title="Clientes" subtitle="Gerencie seus clientes e contas vinculadas" />
+      <div className="page-content" style={{ maxWidth: 900 }}>
+
+        {/* Header actions */}
+        <div style={{ display: 'flex', gap: 'var(--space-sm)', marginBottom: 'var(--space-lg)', flexWrap: 'wrap' }}>
+          <div style={{ flex: 1, minWidth: 200, position: 'relative' }}>
+            <FiSearch size={14} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-tertiary)' }} />
+            <input
+              type="text"
+              placeholder="Buscar cliente..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              className="input"
+              style={{ paddingLeft: 36, width: '100%' }}
+            />
+          </div>
+          <button className="btn btn-primary" onClick={() => setShowCreate(true)}>
+            <FiPlus size={16} /> Novo Cliente
           </button>
         </div>
 
+        {/* Create card */}
         {showCreate && (
-          <div className="card" style={{ marginBottom: 'var(--space-xl)' }}>
-            <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 'var(--space-lg)' }}>👤 Cadastrar Cliente</h3>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-md)' }}>
-              <div className="grid-2">
-                <div className="input-group">
-                  <label className="input-label">Nome</label>
-                  <input className="input" placeholder="Nome completo" />
-                </div>
-                <div className="input-group">
-                  <label className="input-label">Empresa</label>
-                  <input className="input" placeholder="Nome da empresa" />
-                </div>
-              </div>
-              <div className="input-group">
-                <label className="input-label">E-mail</label>
-                <input className="input" type="email" placeholder="email@empresa.com" />
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--space-sm)' }}>
-                <button className="btn btn-secondary" onClick={() => setShowCreate(false)}>Cancelar</button>
-                <button className="btn btn-primary" onClick={() => setShowCreate(false)}>Cadastrar</button>
+          <div className="card" style={{
+            marginBottom: 'var(--space-lg)',
+            border: '2px solid var(--accent-primary)',
+            position: 'relative',
+          }}>
+            <button
+              onClick={() => setShowCreate(false)}
+              style={{
+                position: 'absolute', top: 12, right: 12,
+                background: 'none', border: 'none',
+                color: 'var(--text-tertiary)', cursor: 'pointer',
+              }}
+            >
+              <FiX size={18} />
+            </button>
+            <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 'var(--space-md)' }}>
+              Novo Cliente
+            </h3>
+
+            <div className="input-group" style={{ marginBottom: 'var(--space-md)' }}>
+              <label className="input-label">Nome do Cliente</label>
+              <input
+                className="input"
+                type="text"
+                placeholder="Ex: E-commerce Premium"
+                value={newName}
+                onChange={e => setNewName(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleCreate()}
+                autoFocus
+              />
+            </div>
+
+            <div style={{ marginBottom: 'var(--space-md)' }}>
+              <label className="input-label" style={{ marginBottom: 6, display: 'block' }}>Cor do Avatar</label>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {AVATAR_COLORS.map(color => (
+                  <button
+                    key={color}
+                    onClick={() => setNewColor(color)}
+                    style={{
+                      width: 28, height: 28, borderRadius: '50%', background: color,
+                      border: newColor === color ? '3px solid var(--text-primary)' : '3px solid transparent',
+                      cursor: 'pointer', transition: 'all 0.15s',
+                    }}
+                  />
+                ))}
               </div>
             </div>
+
+            <button className="btn btn-primary" onClick={handleCreate} disabled={!newName.trim() || creating}>
+              {creating ? 'Criando...' : 'Criar Cliente'}
+            </button>
           </div>
         )}
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-md)' }}>
-          {clients.map(client => (
-            <div key={client.id} className="card" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-lg)' }}>
-                <div style={{
-                  width: 48, height: 48,
-                  background: 'var(--accent-gradient)',
-                  borderRadius: 'var(--radius-md)',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: 18, fontWeight: 700, color: 'white',
-                }}>
-                  {client.name.charAt(0)}
+        {/* Loading */}
+        {isLoading && (
+          <div style={{ textAlign: 'center', padding: 'var(--space-xl)', color: 'var(--text-secondary)' }}>
+            <div className="spinner" style={{ margin: '0 auto var(--space-md)' }} />
+            Carregando clientes...
+          </div>
+        )}
+
+        {/* Empty state */}
+        {!isLoading && clients.length === 0 && (
+          <div className="card" style={{ textAlign: 'center', padding: 'var(--space-xl)' }}>
+            <FiUser size={48} style={{ color: 'var(--text-tertiary)', marginBottom: 'var(--space-md)' }} />
+            <h3 style={{ fontSize: 18, fontWeight: 700, marginBottom: 8 }}>Nenhum cliente cadastrado</h3>
+            <p className="text-sm text-secondary" style={{ marginBottom: 'var(--space-lg)' }}>
+              Crie seu primeiro cliente para vincular contas do Google Ads.
+            </p>
+            <button className="btn btn-primary btn-lg" onClick={() => setShowCreate(true)}>
+              <FiPlus size={16} /> Criar Primeiro Cliente
+            </button>
+          </div>
+        )}
+
+        {/* Client cards */}
+        <div style={{ display: 'grid', gap: 'var(--space-md)' }}>
+          {filtered.map(client => {
+            const googleAccounts = client.accounts.filter(a => a.platform === 'google');
+            const metaAccounts = client.accounts.filter(a => a.platform === 'meta');
+            const isSelected = selectedClient?.id === client.id;
+
+            return (
+              <div key={client.id}>
+                <div
+                  className="card"
+                  style={{
+                    cursor: 'pointer',
+                    border: isSelected ? '2px solid var(--accent-primary)' : '2px solid transparent',
+                    transition: 'all 0.2s',
+                  }}
+                  onClick={() => selectClient(client.id)}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-md)' }}>
+                    {/* Avatar */}
+                    <div style={{
+                      width: 48, height: 48, borderRadius: 'var(--radius-md)',
+                      background: client.avatarColor || '#6366f1',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      color: '#fff', fontSize: 20, fontWeight: 700, flexShrink: 0,
+                    }}>
+                      {client.name.charAt(0).toUpperCase()}
+                    </div>
+
+                    {/* Info */}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <h3 style={{ fontSize: 16, fontWeight: 700 }}>{client.name}</h3>
+                        {isSelected && (
+                          <span className="badge badge-active" style={{ fontSize: 9 }}>
+                            <span className="badge-dot" /> Selecionado
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ display: 'flex', gap: 12, marginTop: 4, flexWrap: 'wrap' }}>
+                        {googleAccounts.length > 0 && (
+                          <span className="text-sm text-secondary" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                            <span style={{ color: '#4285f4', fontWeight: 700, fontSize: 13 }}>G</span>
+                            {googleAccounts.length} conta{googleAccounts.length > 1 ? 's' : ''}
+                          </span>
+                        )}
+                        {metaAccounts.length > 0 && (
+                          <span className="text-sm text-secondary" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                            <span style={{ color: '#1877f2', fontWeight: 700, fontSize: 13 }}>f</span>
+                            {metaAccounts.length} conta{metaAccounts.length > 1 ? 's' : ''}
+                          </span>
+                        )}
+                        {client.accounts.length === 0 && (
+                          <span className="text-sm" style={{ color: 'var(--warning)' }}>
+                            <FiLink size={12} /> Nenhuma conta vinculada
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Actions */}
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                      <button
+                        className="btn btn-sm btn-secondary"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setShowConfig(showConfig === client.id ? null : client.id);
+                        }}
+                        title="Configurar contas"
+                      >
+                        <FiSettings size={14} />
+                      </button>
+                      {confirmDelete === client.id ? (
+                        <>
+                          <button
+                            className="btn btn-sm"
+                            style={{ background: 'var(--danger)', color: '#fff', fontSize: 11 }}
+                            onClick={(e) => { e.stopPropagation(); handleDelete(client.id); }}
+                          >
+                            Confirmar
+                          </button>
+                          <button
+                            className="btn btn-sm btn-secondary"
+                            style={{ fontSize: 11 }}
+                            onClick={(e) => { e.stopPropagation(); setConfirmDelete(null); }}
+                          >
+                            Não
+                          </button>
+                        </>
+                      ) : (
+                        <button
+                          className="btn btn-sm btn-secondary"
+                          onClick={(e) => { e.stopPropagation(); setConfirmDelete(client.id); }}
+                          title="Remover cliente"
+                        >
+                          <FiTrash2 size={14} />
+                        </button>
+                      )}
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 2 }}>{client.name}</h3>
-                  <p className="text-sm text-secondary">{client.company} • {client.email}</p>
-                  <p className="text-sm text-secondary">
-                    {client.lastAccess ? `Último acesso: ${new Date(client.lastAccess).toLocaleDateString('pt-BR')}` : 'Nunca acessou'}
-                  </p>
-                </div>
+
+                {/* Expandable config panel */}
+                {showConfig === client.id && (
+                  <div className="card" style={{
+                    marginTop: -1,
+                    borderTop: '1px dashed var(--border-color)',
+                    borderRadius: '0 0 var(--radius-lg) var(--radius-lg)',
+                  }}>
+                    <h4 style={{ fontSize: 14, fontWeight: 700, marginBottom: 'var(--space-md)' }}>
+                      Contas Vinculadas
+                    </h4>
+
+                    {/* Existing accounts */}
+                    {client.accounts.map(account => (
+                      <div key={account.id} style={{
+                        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                        padding: '8px 12px', background: 'var(--bg-glass)',
+                        borderRadius: 'var(--radius-sm)', marginBottom: 6,
+                      }}>
+                        <div>
+                          <span className={`badge ${account.platform === 'google' ? 'badge-google' : 'badge-meta'}`}
+                            style={{ fontSize: 9, marginRight: 8 }}>
+                            {account.platform === 'google' ? 'Google' : 'Meta'}
+                          </span>
+                          <span style={{ fontSize: 13, fontWeight: 600 }}>{account.accountName}</span>
+                          <span className="text-sm text-tertiary" style={{ marginLeft: 8 }}>
+                            {account.accountId}
+                          </span>
+                        </div>
+                        <span className={`badge ${account.status === 'active' ? 'badge-active' : 'badge-paused'}`}
+                          style={{ fontSize: 9 }}>
+                          <span className="badge-dot" />
+                          {account.status === 'active' ? 'Ativo' : 'Expirado'}
+                        </span>
+                      </div>
+                    ))}
+
+                    {/* Add account buttons */}
+                    <div style={{ display: 'flex', gap: 8, marginTop: 'var(--space-md)' }}>
+                      <a
+                        href={`/api/auth/google?clientId=${client.id}`}
+                        className="btn btn-sm btn-secondary"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <span style={{ color: '#4285f4', fontWeight: 700 }}>G</span>
+                        Vincular Google Ads
+                      </a>
+                      <a
+                        href={`/api/auth/meta?clientId=${client.id}`}
+                        className="btn btn-sm btn-secondary"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <span style={{ color: '#1877f2', fontWeight: 700 }}>f</span>
+                        Vincular Meta Ads
+                      </a>
+                    </div>
+                  </div>
+                )}
               </div>
-              <div style={{ display: 'flex', gap: 'var(--space-sm)', alignItems: 'center' }}>
-                <button className="btn btn-sm btn-secondary" onClick={() => copyLink(client.accessToken, client.id)}>
-                  {copiedId === client.id ? <><FiCheck size={14} /> Copiado!</> : <><FiLink size={14} /> Copiar Link</>}
-                </button>
-                <button className="btn btn-sm btn-secondary" onClick={() => window.open(`/client/${client.accessToken}`, '_blank')}>
-                  <FiExternalLink size={14} /> Abrir Portal
-                </button>
-                <button className="btn btn-sm btn-danger">
-                  <FiTrash2 size={14} />
-                </button>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     </>

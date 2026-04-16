@@ -1,55 +1,42 @@
-import { useState, useCallback, useEffect } from 'react';
+'use client';
 
-export interface RealAdSet {
-  id: string;
-  name: string;
-  status: string;
-  campaignId: string;
-  budget: number;
-  spend: number;
-  impressions: number;
-  clicks: number;
-  ctr: number;
-  cpc: number;
-  conversions: number;
-  leads: number;
-  cpl: number;
-  roas: number;
-}
+import { useState, useEffect, useCallback } from 'react';
+import { useAdAccount } from './AdAccountContext';
 
-export function useAdSets(campaignId: string | null, datePreset: string = 'last_30d') {
-  const [adSets, setAdSets] = useState<RealAdSet[]>([]);
+export function useAdSets(campaignId: string | null, datePreset: string = 'last_30d', customRange?: { since: string; until: string } | null) {
+  const { metaConnected } = useAdAccount();
+  const [adSets, setAdSets] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   const fetchAdSets = useCallback(async () => {
-    if (!campaignId) return;
-
-    const token = localStorage.getItem('meta_access_token');
-    if (!token) return;
-
+    if (!campaignId || !metaConnected) { setAdSets([]); return; }
     setLoading(true);
-    setError(null);
     try {
-      const res = await fetch(`/api/meta/adsets?campaignId=${campaignId}&token=${token}&datePreset=${datePreset}`);
+      const params = new URLSearchParams({ campaignId });
+      if (datePreset === 'custom' && customRange?.since && customRange?.until) {
+        params.set('since', customRange.since);
+        params.set('until', customRange.until);
+      } else {
+        params.set('datePreset', datePreset);
+      }
+
+      const res = await fetch(`/api/meta/adsets?${params.toString()}`);
       const data = await res.json();
-      
       if (data.success && data.adsets) {
         setAdSets(data.adsets);
       } else {
-        setError(data.error || 'Failed to load ad sets');
+        setAdSets([]);
       }
-    } catch (err: any) {
-      console.error('Error fetching ad sets:', err);
-      setError(err.message || 'Unknown error');
+    } catch {
+      setAdSets([]);
     } finally {
       setLoading(false);
     }
-  }, [campaignId, datePreset]);
+  }, [campaignId, datePreset, customRange?.since, customRange?.until, metaConnected]);
 
   useEffect(() => {
     fetchAdSets();
   }, [fetchAdSets]);
 
-  return { adSets, loading, error, refetch: fetchAdSets };
+  return { adSets, loading, refetch: fetchAdSets };
 }

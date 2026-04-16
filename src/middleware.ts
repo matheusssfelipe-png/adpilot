@@ -1,7 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { jwtVerify } from 'jose';
 
-const PUBLIC_PATHS = ['/login', '/api/auth/login', '/api/auth/logout'];
+const PUBLIC_PATHS = [
+  '/login',
+  '/api/auth/login',
+  '/api/auth/logout',
+  '/api/auth/disconnect',
+  '/api/auth/meta',
+  '/api/auth/google',
+  '/api/auth/tokens',
+  '/client/',
+];
 
 function isPublicPath(pathname: string) {
   return PUBLIC_PATHS.some(p => pathname.startsWith(p));
@@ -26,7 +35,9 @@ export async function middleware(request: NextRequest) {
       const token = request.cookies.get('adpilot_session')?.value;
       if (token) {
         try {
-          const secret = new TextEncoder().encode(process.env.JWT_SECRET || 'adpilot-default-secret-change-me');
+          const jwtSecret = process.env.JWT_SECRET;
+          if (!jwtSecret) return NextResponse.next();
+          const secret = new TextEncoder().encode(jwtSecret);
           await jwtVerify(token, secret);
           return NextResponse.redirect(new URL('/dashboard', request.url));
         } catch {
@@ -45,7 +56,12 @@ export async function middleware(request: NextRequest) {
   }
 
   try {
-    const secret = new TextEncoder().encode(process.env.JWT_SECRET || 'adpilot-default-secret-change-me');
+    const jwtSecret = process.env.JWT_SECRET;
+    if (!jwtSecret) {
+      // If no secret configured, allow access (dev mode)
+      return NextResponse.next();
+    }
+    const secret = new TextEncoder().encode(jwtSecret);
     await jwtVerify(token, secret);
     return NextResponse.next();
   } catch {

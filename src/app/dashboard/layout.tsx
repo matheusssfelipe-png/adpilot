@@ -5,6 +5,8 @@ import { usePathname } from 'next/navigation';
 import Sidebar from '@/components/layout/Sidebar';
 import { MobileMenuProvider, useMobileMenu } from '@/components/layout/MobileMenuContext';
 import { AdAccountProvider } from '@/lib/AdAccountContext';
+import { MetricsStoreProvider } from '@/lib/useMetricsStore';
+import { ClientProvider } from '@/lib/ClientContext';
 
 function DashboardContent({ children }: { children: React.ReactNode }) {
   const { isOpen, close } = useMobileMenu();
@@ -43,10 +45,15 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   return (
-    <AdAccountProvider>
-      <MobileMenuProvider>
-        <DashboardContent>{children}</DashboardContent>
-      </MobileMenuProvider>
-    </AdAccountProvider>
+    <ClientProvider>
+      <AdAccountProvider>
+        <MetricsStoreProvider>
+          <MobileMenuProvider>
+            <DashboardContent>{children}</DashboardContent>
+          </MobileMenuProvider>
+        </MetricsStoreProvider>
+      </AdAccountProvider>
+    </ClientProvider>
   );
 }
+

@@ -12,6 +12,7 @@ export interface AdAccount {
   businessId: string;
   currency: string;
   status: 'active' | 'disconnected';
+  isManager?: boolean;
   profilePicture?: string;
 }
 
@@ -22,12 +23,14 @@ interface AdAccountContextType {
   allAccountsMode: boolean;
   setAllAccountsMode: (v: boolean) => void;
   metaConnected: boolean;
+  googleConnected: boolean;
   disconnectMeta: () => void;
+  disconnectGoogle: () => void;
 }
 
 const AdAccountContext = createContext<AdAccountContextType | null>(null);
 
-// Mock ad accounts — will be replaced with real data from OAuth
+// Mock ad accounts — used as fallback when not connected
 export const mockAdAccounts: AdAccount[] = [
   {
     id: 'act_001',
@@ -72,67 +75,72 @@ export function AdAccountProvider({ children }: { children: React.ReactNode }) {
   const [selectedAccountId, setSelectedAccountId] = useState<string>('');
   const [allAccountsMode, setAllAccountsMode] = useState(false);
   const [metaConnected, setMetaConnected] = useState(false);
+  const [googleConnected, setGoogleConnected] = useState(false);
 
-  // Load token and fetch real accounts on mount
+  // Check token status and fetch real accounts on mount
   useEffect(() => {
-    // Set initial selected account if not set
-    if (!selectedAccountId && accounts.length > 0) {
-      setSelectedAccountId(accounts[0].id);
+    // Set initial selected account
+    if (accounts.length > 0) {
+      setSelectedAccountId(prev => prev || accounts[0].id);
     }
 
-    // Check if we just redirected back from Meta OAuth
+    // Clean URL params after OAuth redirect (success/error indicators only now)
     const urlParams = new URLSearchParams(window.location.search);
-    const tokenFromUrl = urlParams.get('token');
-    
-    if (tokenFromUrl) {
-      localStorage.setItem('meta_access_token', tokenFromUrl);
-      
-      // Clean up the URL without reloading the page
+    const hasOAuthResult = urlParams.get('success') || urlParams.get('error');
+    if (hasOAuthResult) {
       const newUrl = window.location.pathname;
       window.history.replaceState({}, document.title, newUrl);
     }
 
-    const token = tokenFromUrl || localStorage.getItem('meta_access_token');
-    if (token) {
-      setMetaConnected(true);
-      fetchRealMetaAccounts(token);
-    }
+    // Check which tokens exist via secure API endpoint
+    checkTokenStatus();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const fetchRealMetaAccounts = async (token: string) => {
+  const checkTokenStatus = async () => {
     try {
-      let allData: any[] = [];
-      let url: string | null = `https://graph.facebook.com/v21.0/me/adaccounts?fields=id,name,account_status,currency,business{id,name}&limit=100&access_token=${token}`;
-      
-      // Paginate through ALL accounts
-      while (url) {
-        const res: Response = await fetch(url);
-        const data: { data?: any[]; paging?: { next?: string } } = await res.json();
-        
-        if (data.data) {
-          allData = [...allData, ...data.data];
-        }
-        
-        // Follow pagination cursor
-        url = data.paging?.next || null;
+      const res = await fetch('/api/auth/tokens');
+      const data = await res.json();
+
+      if (data.meta) {
+        setMetaConnected(true);
+        fetchRealMetaAccounts();
       }
 
-      if (allData.length > 0) {
-        const realMetaAccounts: AdAccount[] = allData.map((acc: any) => ({
+      if (data.google) {
+        setGoogleConnected(true);
+        fetchRealGoogleAccounts();
+      }
+    } catch (e) {
+      console.error('Failed to check token status:', e);
+    }
+  };
+
+  // --- Meta Ads: fetch real accounts via API route (Bug #11 fix) ---
+  const fetchRealMetaAccounts = async () => {
+    try {
+      const res = await fetch('/api/meta/accounts');
+      const data = await res.json();
+
+      if (data.error) {
+        console.error('Meta accounts error:', data.error);
+        return;
+      }
+
+      if (data.accounts && data.accounts.length > 0) {
+        const realMetaAccounts: AdAccount[] = data.accounts.map((acc: any) => ({
           id: acc.id,
           name: acc.name || 'Conta sem nome',
           platform: 'meta' as Platform,
-          businessName: acc.business?.name || 'Sem Business Manager',
-          businessId: acc.business?.id || 'unknown',
+          businessName: acc.businessName || 'Sem Business Manager',
+          businessId: acc.businessId || 'unknown',
           currency: acc.currency || 'BRL',
-          status: acc.account_status === 1 ? 'active' as const : 'disconnected' as const,
+          status: acc.status === 'active' ? 'active' as const : 'disconnected' as const,
         }));
 
-        // Replace meta mocks with real ones, keep google mocks
         setAccounts(prev => {
           const others = prev.filter(a => a.platform !== 'meta');
           const newAccounts = [...realMetaAccounts, ...others];
-          // Auto-select first account if none selected
           setSelectedAccountId(cur => {
             if (!cur || !newAccounts.find(a => a.id === cur)) {
               return newAccounts[0]?.id || '';
@@ -147,6 +155,49 @@ export function AdAccountProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  // --- Google Ads: fetch real accounts ---
+  const fetchRealGoogleAccounts = async () => {
+    try {
+      const res = await fetch('/api/google/accounts');
+
+      const data = await res.json();
+
+      if (data.error) {
+        console.error('Google Ads error:', data.error);
+        return;
+      }
+
+      if (data.accounts && data.accounts.length > 0) {
+        const realGoogleAccounts: AdAccount[] = data.accounts.map((acc: any) => ({
+          id: `google_${acc.id}`,
+          name: acc.name || `Google Ads ${acc.id}`,
+          platform: 'google' as Platform,
+          businessName: acc.managedBy ? `MCC ${acc.managedBy}` : 'Google Ads',
+          businessId: String(acc.id),
+          currency: acc.currency || 'BRL',
+          status: 'active' as const,
+          isManager: acc.isManager || false,
+        }));
+
+        if (realGoogleAccounts.length > 0) {
+          setAccounts(prev => {
+            const others = prev.filter(a => a.platform !== 'google');
+            const newAccounts = [...others, ...realGoogleAccounts];
+            setSelectedAccountId(cur => {
+              if (!cur || !newAccounts.find(a => a.id === cur)) {
+                return newAccounts[0]?.id || '';
+              }
+              return cur;
+            });
+            return newAccounts;
+          });
+        }
+      }
+    } catch (e) {
+      console.error('Failed to fetch real google accounts:', e);
+    }
+  };
+
   const selectedAccount = accounts.find(a => a.id === selectedAccountId) || null;
 
   const switchAccount = useCallback((accountId: string) => {
@@ -154,10 +205,36 @@ export function AdAccountProvider({ children }: { children: React.ReactNode }) {
     setAllAccountsMode(false);
   }, []);
 
-  const disconnectMeta = useCallback(() => {
-    localStorage.removeItem('meta_access_token');
+  const disconnectMeta = useCallback(async () => {
+    try {
+      await fetch('/api/auth/disconnect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ platform: 'meta' }),
+      });
+    } catch { /* ignore */ }
     setMetaConnected(false);
-    setAccounts(mockAdAccounts);
+    setAccounts(prev => {
+      const googleAccounts = prev.filter(a => a.platform === 'google');
+      const defaultMeta = mockAdAccounts.filter(a => a.platform === 'meta');
+      return [...defaultMeta, ...googleAccounts];
+    });
+  }, []);
+
+  const disconnectGoogle = useCallback(async () => {
+    try {
+      await fetch('/api/auth/disconnect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ platform: 'google' }),
+      });
+    } catch { /* ignore */ }
+    setGoogleConnected(false);
+    setAccounts(prev => {
+      const metaAccounts = prev.filter(a => a.platform === 'meta');
+      const defaultGoogle = mockAdAccounts.filter(a => a.platform === 'google');
+      return [...metaAccounts, ...defaultGoogle];
+    });
   }, []);
 
   return (
@@ -168,7 +245,9 @@ export function AdAccountProvider({ children }: { children: React.ReactNode }) {
       allAccountsMode,
       setAllAccountsMode,
       metaConnected,
+      googleConnected,
       disconnectMeta,
+      disconnectGoogle,
     }}>
       {children}
     </AdAccountContext.Provider>

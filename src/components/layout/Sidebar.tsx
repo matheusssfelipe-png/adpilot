@@ -10,18 +10,19 @@ import {
 } from 'react-icons/fi';
 import { useMobileMenu } from './MobileMenuContext';
 import { useAdAccount } from '@/lib/AdAccountContext';
+import { useClient } from '@/lib/ClientContext';
 
 const navItems = [
   { label: 'Principal', items: [
     { href: '/dashboard', icon: FiHome, text: 'Dashboard' },
+    { href: '/dashboard/clients', icon: FiUsers, text: 'Clientes' },
     { href: '/dashboard/chat', icon: FiMessageSquare, text: 'Chat IA' },
     { href: '/dashboard/campaigns', icon: FiTarget, text: 'Campanhas' },
-    { href: '/dashboard/creatives', icon: FiImage, text: 'Criativos IA' },
-    { href: '/dashboard/analytics', icon: FiBarChart2, text: 'Análises' },
   ]},
-  { label: 'Relatórios', items: [
+  { label: 'Análises', items: [
+    { href: '/dashboard/analytics', icon: FiBarChart2, text: 'Analytics' },
     { href: '/dashboard/reports', icon: FiFileText, text: 'Relatórios' },
-    { href: '/dashboard/clients', icon: FiUsers, text: 'Clientes' },
+    { href: '/dashboard/creatives', icon: FiImage, text: 'Criativos IA' },
   ]},
 ];
 
@@ -30,7 +31,9 @@ export default function Sidebar() {
   const router = useRouter();
   const { isOpen, close } = useMobileMenu();
   const { accounts, selectedAccount, switchAccount } = useAdAccount();
+  const { clients, selectedClient, selectClient } = useClient();
   const [accountDropdownOpen, setAccountDropdownOpen] = useState(false);
+  const [clientDropdownOpen, setClientDropdownOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [loggingOut, setLoggingOut] = useState(false);
 
@@ -82,85 +85,91 @@ export default function Sidebar() {
         </button>
       </div>
 
-      {/* Account Selector */}
+      {/* Client Selector */}
       <div className="account-selector">
         <button 
           className="account-selector-btn"
           onClick={() => {
-            setAccountDropdownOpen(!accountDropdownOpen);
-            if (!accountDropdownOpen) setSearchQuery('');
+            setClientDropdownOpen(!clientDropdownOpen);
           }}
         >
-          <div className="account-selector-info">
-            <div className="account-selector-platform">
-              <span className={`badge ${selectedAccount?.platform === 'meta' ? 'badge-meta' : 'badge-google'}`} style={{ fontSize: 10, padding: '1px 6px' }}>
-                {selectedAccount?.platform === 'meta' ? 'Meta' : 'Google'}
-              </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0 }}>
+            {/* Client avatar */}
+            <div style={{
+              width: 32, height: 32, borderRadius: 'var(--radius-sm)',
+              background: selectedClient?.avatarColor || 'var(--accent-primary)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              color: '#fff', fontSize: 14, fontWeight: 700, flexShrink: 0,
+            }}>
+              {selectedClient?.name?.charAt(0)?.toUpperCase() || '?'}
             </div>
-            <div className="account-selector-name">{selectedAccount?.name || 'Selecionar conta'}</div>
-            <div className="account-selector-business">{selectedAccount?.businessName}</div>
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <div className="account-selector-name">
+                {selectedClient?.name || 'Selecionar cliente'}
+              </div>
+              <div className="account-selector-business">
+                {selectedClient?.accounts.length
+                  ? `${selectedClient.accounts.length} conta${selectedClient.accounts.length > 1 ? 's' : ''} vinculada${selectedClient.accounts.length > 1 ? 's' : ''}`
+                  : 'Nenhuma conta'
+                }
+              </div>
+            </div>
           </div>
           <FiChevronDown 
             size={16} 
             style={{ 
               transition: 'transform 200ms ease',
-              transform: accountDropdownOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+              transform: clientDropdownOpen ? 'rotate(180deg)' : 'rotate(0deg)',
               flexShrink: 0,
               color: 'var(--text-tertiary)',
             }} 
           />
         </button>
 
-        {/* Dropdown */}
-        {accountDropdownOpen && (
+        {/* Client Dropdown */}
+        {clientDropdownOpen && (
           <div className="account-dropdown">
-            {/* Search input */}
-            <div className="account-search-wrapper">
-              <FiSearch size={14} className="account-search-icon" />
-              <input
-                type="text"
-                className="account-search-input"
-                placeholder={`Buscar entre ${accounts.length} contas...`}
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                autoFocus
-              />
-            </div>
-
-            {/* Scrollable accounts list */}
             <div className="account-dropdown-list">
-              {Object.keys(businesses).length === 0 ? (
+              {clients.length === 0 ? (
                 <div className="account-dropdown-empty">
-                  Nenhuma conta encontrada
+                  Nenhum cliente cadastrado
                 </div>
               ) : (
-                Object.entries(businesses).map(([businessName, accts]) => (
-                  <div key={businessName}>
-                    <div className="account-dropdown-group">{businessName} ({accts.length})</div>
-                    {accts.map(account => (
-                      <button
-                        key={account.id}
-                        className={`account-dropdown-item ${account.id === selectedAccount?.id ? 'active' : ''}`}
-                        onClick={() => {
-                          switchAccount(account.id);
-                          setAccountDropdownOpen(false);
-                          setSearchQuery('');
-                        }}
-                      >
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                            <span className={`badge ${account.platform === 'meta' ? 'badge-meta' : 'badge-google'}`} style={{ fontSize: 9, padding: '0px 5px' }}>
-                              {account.platform === 'meta' ? 'M' : 'G'}
-                            </span>
-                            <span className="account-dropdown-item-name">{account.name}</span>
-                          </div>
+                clients.map(client => (
+                  <button
+                    key={client.id}
+                    className={`account-dropdown-item ${client.id === selectedClient?.id ? 'active' : ''}`}
+                    onClick={() => {
+                      selectClient(client.id);
+                      setClientDropdownOpen(false);
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0 }}>
+                      <div style={{
+                        width: 24, height: 24, borderRadius: 4,
+                        background: client.avatarColor || '#6366f1',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        color: '#fff', fontSize: 11, fontWeight: 700, flexShrink: 0,
+                      }}>
+                        {client.name.charAt(0).toUpperCase()}
+                      </div>
+                      <div style={{ minWidth: 0 }}>
+                        <span className="account-dropdown-item-name">{client.name}</span>
+                        <div style={{ fontSize: 10, color: 'var(--text-tertiary)', display: 'flex', gap: 6 }}>
+                          {client.accounts.filter(a => a.platform === 'google').length > 0 && (
+                            <span><strong style={{ color: '#4285f4' }}>G</strong> {client.accounts.filter(a => a.platform === 'google').length}</span>
+                          )}
+                          {client.accounts.filter(a => a.platform === 'meta').length > 0 && (
+                            <span><strong style={{ color: '#1877f2' }}>f</strong> {client.accounts.filter(a => a.platform === 'meta').length}</span>
+                          )}
+                          {client.accounts.length === 0 && <span>sem contas</span>}
                         </div>
-                        {account.id === selectedAccount?.id && (
-                          <FiCheck size={14} style={{ color: 'var(--accent-primary)', flexShrink: 0 }} />
-                        )}
-                      </button>
-                    ))}
-                  </div>
+                      </div>
+                    </div>
+                    {client.id === selectedClient?.id && (
+                      <FiCheck size={14} style={{ color: 'var(--accent-primary)', flexShrink: 0 }} />
+                    )}
+                  </button>
                 ))
               )}
             </div>

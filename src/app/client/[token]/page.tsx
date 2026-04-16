@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { use, useState, useEffect } from 'react';
 import { mockKPIs, mockChartData, mockCampaigns } from '@/lib/mock-data';
 import { FiTrendingUp, FiBarChart2, FiDollarSign, FiEye, FiMousePointer, FiShoppingCart } from 'react-icons/fi';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
@@ -23,6 +23,40 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 };
 
 export default function ClientPortalPage({ params }: { params: Promise<{ token: string }> }) {
+  const { token } = use(params);
+  const [isValid, setIsValid] = useState<boolean | null>(null);
+  const [clientName, setClientName] = useState('');
+
+  // Validate the client token
+  useEffect(() => {
+    // Simple token validation (in production, verify against a database)
+    if (token && token.length >= 8) {
+      setIsValid(true);
+      // Extract client name from token or fetch from API
+      setClientName('Empresa ABC');
+    } else {
+      setIsValid(false);
+    }
+  }, [token]);
+
+  if (isValid === null) {
+    return (
+      <div style={{ minHeight: '100vh', background: 'var(--bg-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <p style={{ color: 'var(--text-secondary)' }}>Carregando...</p>
+      </div>
+    );
+  }
+
+  if (!isValid) {
+    return (
+      <div style={{ minHeight: '100vh', background: 'var(--bg-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 16 }}>
+        <div style={{ fontSize: 48 }}>🔒</div>
+        <h1 style={{ fontSize: 24, fontWeight: 700 }}>Link inválido</h1>
+        <p style={{ color: 'var(--text-secondary)' }}>Este link de acesso não é válido ou expirou.</p>
+      </div>
+    );
+  }
+
   return (
     <div style={{ minHeight: '100vh', background: 'var(--bg-primary)' }}>
       {/* Header */}
@@ -42,7 +76,7 @@ export default function ClientPortalPage({ params }: { params: Promise<{ token: 
             AdPilot — Portal do Cliente
           </span>
         </div>
-        <span className="text-sm text-secondary">Empresa ABC</span>
+        <span className="text-sm text-secondary">{clientName}</span>
       </header>
 
       <div className="page-content" style={{ maxWidth: 1200, margin: '0 auto' }}>
@@ -149,7 +183,7 @@ export default function ClientPortalPage({ params }: { params: Promise<{ token: 
                     <td>{c.clicks.toLocaleString('pt-BR')}</td>
                     <td>{c.conversions.toLocaleString('pt-BR')}</td>
                     <td style={{ color: c.roas >= 3 ? 'var(--success)' : 'var(--warning)', fontWeight: 700 }}>
-                      {c.roas}x
+                      {c.roas > 0 ? `${c.roas}x` : '—'}
                     </td>
                   </tr>
                 ))}

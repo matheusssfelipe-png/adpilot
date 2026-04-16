@@ -5,8 +5,8 @@ export async function POST(request: NextRequest) {
   try {
     const { email, password } = await request.json();
 
-    const adminEmail = process.env.ADMIN_EMAIL;
-    const adminPassword = process.env.ADMIN_PASSWORD;
+    const adminEmail = process.env.ADMIN_EMAIL?.trim();
+    const adminPassword = process.env.ADMIN_PASSWORD?.trim();
 
     if (!adminEmail || !adminPassword) {
       return NextResponse.json(
@@ -24,7 +24,14 @@ export async function POST(request: NextRequest) {
     }
 
     // Generate JWT token (expires in 7 days)
-    const secret = new TextEncoder().encode(process.env.JWT_SECRET || 'adpilot-default-secret-change-me');
+    const jwtSecret = process.env.JWT_SECRET;
+    if (!jwtSecret) {
+      return NextResponse.json(
+        { error: 'JWT_SECRET não configurado no servidor.' },
+        { status: 500 }
+      );
+    }
+    const secret = new TextEncoder().encode(jwtSecret);
     const token = await new SignJWT({ email, role: 'admin' })
       .setProtectedHeader({ alg: 'HS256' })
       .setIssuedAt()

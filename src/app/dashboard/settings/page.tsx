@@ -1,15 +1,132 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import Header from '@/components/layout/Header';
 import { useAdAccount } from '@/lib/AdAccountContext';
-import { FiSave, FiEye, FiEyeOff, FiCheck, FiLink, FiXCircle, FiExternalLink, FiShield } from 'react-icons/fi';
+import { FiSave, FiEye, FiEyeOff, FiCheck, FiLink, FiXCircle, FiExternalLink, FiShield, FiSearch, FiChevronDown, FiChevronUp } from 'react-icons/fi';
+
+// Reusable scrollable account list component
+function AccountList({ accounts, platform }: { accounts: any[]; platform: 'meta' | 'google' }) {
+  const [search, setSearch] = useState('');
+  const [expanded, setExpanded] = useState(false);
+
+  const filtered = useMemo(() => {
+    if (!search) return accounts;
+    const q = search.toLowerCase();
+    return accounts.filter(a =>
+      a.name.toLowerCase().includes(q) ||
+      a.id.toLowerCase().includes(q) ||
+      a.businessName?.toLowerCase().includes(q)
+    );
+  }, [accounts, search]);
+
+  const COLLAPSED_MAX = 4;
+  const showExpand = filtered.length > COLLAPSED_MAX;
+  const displayed = expanded ? filtered : filtered.slice(0, COLLAPSED_MAX);
+
+  return (
+    <div style={{ marginBottom: 'var(--space-md)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--space-sm)' }}>
+        <div className="text-sm text-secondary" style={{ fontWeight: 600 }}>
+          Contas vinculadas ({accounts.length})
+        </div>
+      </div>
+
+      {/* Search - only show if more than 4 accounts */}
+      {accounts.length > 4 && (
+        <div style={{ position: 'relative', marginBottom: 'var(--space-sm)' }}>
+          <FiSearch size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-tertiary)', pointerEvents: 'none' }} />
+          <input
+            type="text"
+            placeholder="Buscar conta..."
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            autoComplete="off"
+            name="account-search"
+            style={{
+              width: '100%',
+              padding: '8px 12px 8px 32px',
+              background: 'var(--bg-glass)',
+              border: '1px solid var(--border-color)',
+              borderRadius: 'var(--radius-sm)',
+              color: 'var(--text-primary)',
+              fontSize: 12,
+              fontFamily: 'inherit',
+              outline: 'none',
+            }}
+          />
+        </div>
+      )}
+
+      {/* Account list with max-height scroll */}
+      <div style={{
+        maxHeight: expanded ? '400px' : 'none',
+        overflowY: expanded ? 'auto' : 'visible',
+        borderRadius: 'var(--radius-sm)',
+      }}>
+        {displayed.map(account => (
+          <div key={account.id} style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            padding: '8px 12px',
+            background: 'var(--bg-glass)', borderRadius: 'var(--radius-sm)',
+            marginBottom: 3,
+            transition: 'background 0.15s',
+          }}>
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <div style={{ fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {account.name}
+              </div>
+              <div style={{ fontSize: 10, color: 'var(--text-tertiary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {account.businessName} • {account.id}
+              </div>
+            </div>
+            <span className={`badge ${account.status === 'active' ? 'badge-active' : 'badge-paused'}`} style={{ fontSize: 9, flexShrink: 0, marginLeft: 8 }}>
+              <span className="badge-dot" />
+              {account.status === 'active' ? 'Ativa' : 'Inativa'}
+            </span>
+          </div>
+        ))}
+
+        {filtered.length === 0 && (
+          <div style={{ textAlign: 'center', padding: 'var(--space-md)', color: 'var(--text-tertiary)', fontSize: 12 }}>
+            Nenhuma conta encontrada
+          </div>
+        )}
+      </div>
+
+      {/* Show more/less button */}
+      {showExpand && !search && (
+        <button
+          onClick={() => setExpanded(!expanded)}
+          style={{
+            width: '100%',
+            padding: '6px',
+            background: 'none',
+            border: '1px dashed var(--border-color)',
+            borderRadius: 'var(--radius-sm)',
+            color: 'var(--text-secondary)',
+            fontSize: 11,
+            fontFamily: 'inherit',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 4,
+            marginTop: 4,
+            transition: 'all 0.15s',
+          }}
+        >
+          {expanded ? <><FiChevronUp size={12} /> Mostrar menos</> : <><FiChevronDown size={12} /> Ver todas ({filtered.length - COLLAPSED_MAX} mais)</>}
+        </button>
+      )}
+    </div>
+  );
+}
 
 export default function SettingsPage() {
-  const { accounts, metaConnected, disconnectMeta } = useAdAccount();
+  const { accounts, metaConnected, googleConnected, disconnectMeta, disconnectGoogle } = useAdAccount();
   const [saved, setSaved] = useState(false);
   const [showTokens, setShowTokens] = useState(false);
-  const [googleConnected, setGoogleConnected] = useState(true);
 
   const handleSave = () => {
     setSaved(true);
@@ -54,35 +171,9 @@ export default function SettingsPage() {
 
           {metaConnected ? (
             <>
-              {/* Connected accounts list */}
-              <div style={{ marginBottom: 'var(--space-md)' }}>
-                <div className="text-sm text-secondary" style={{ marginBottom: 'var(--space-sm)', fontWeight: 600 }}>
-                  Contas vinculadas ({metaAccounts.length})
-                </div>
-                {metaAccounts.map(account => (
-                  <div key={account.id} style={{
-                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                    padding: 'var(--space-sm) var(--space-md)',
-                    background: 'var(--bg-glass)', borderRadius: 'var(--radius-sm)',
-                    marginBottom: 'var(--space-xs)',
-                  }}>
-                    <div>
-                      <div style={{ fontSize: 13, fontWeight: 600 }}>{account.name}</div>
-                      <div style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>
-                        {account.businessName} • {account.id}
-                      </div>
-                    </div>
-                    <span className="badge badge-active" style={{ fontSize: 10 }}>
-                      <span className="badge-dot" /> Ativa
-                    </span>
-                  </div>
-                ))}
-              </div>
+              <AccountList accounts={metaAccounts} platform="meta" />
               <div style={{ display: 'flex', gap: 'var(--space-sm)' }}>
-                <button
-                  className="btn btn-secondary"
-                  onClick={disconnectMeta}
-                >
+                <button className="btn btn-secondary" onClick={disconnectMeta}>
                   <FiXCircle size={14} /> Desconectar
                 </button>
                 <a href="/api/auth/meta" className="btn btn-secondary">
@@ -127,34 +218,9 @@ export default function SettingsPage() {
 
           {googleConnected ? (
             <>
-              <div style={{ marginBottom: 'var(--space-md)' }}>
-                <div className="text-sm text-secondary" style={{ marginBottom: 'var(--space-sm)', fontWeight: 600 }}>
-                  Contas vinculadas ({googleAccounts.length})
-                </div>
-                {googleAccounts.map(account => (
-                  <div key={account.id} style={{
-                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                    padding: 'var(--space-sm) var(--space-md)',
-                    background: 'var(--bg-glass)', borderRadius: 'var(--radius-sm)',
-                    marginBottom: 'var(--space-xs)',
-                  }}>
-                    <div>
-                      <div style={{ fontSize: 13, fontWeight: 600 }}>{account.name}</div>
-                      <div style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>
-                        {account.businessName} • {account.id}
-                      </div>
-                    </div>
-                    <span className="badge badge-active" style={{ fontSize: 10 }}>
-                      <span className="badge-dot" /> Ativa
-                    </span>
-                  </div>
-                ))}
-              </div>
+              <AccountList accounts={googleAccounts} platform="google" />
               <div style={{ display: 'flex', gap: 'var(--space-sm)' }}>
-                <button
-                  className="btn btn-secondary"
-                  onClick={() => setGoogleConnected(false)}
-                >
+                <button className="btn btn-secondary" onClick={disconnectGoogle}>
                   <FiXCircle size={14} /> Desconectar
                 </button>
                 <a href="/api/auth/google" className="btn btn-secondary">

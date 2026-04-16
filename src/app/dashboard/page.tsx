@@ -1,11 +1,13 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useMemo } from 'react';
 import Header from '@/components/layout/Header';
 import MetricsConfigPanel from '@/components/MetricsConfigPanel';
+import PeriodSelector from '@/components/PeriodSelector';
 import { mockCampaigns } from '@/lib/mock-data';
-import { ALL_METRICS, DEFAULT_DASHBOARD_METRICS, PERIOD_OPTIONS, calcTotals } from '@/lib/metrics-config';
+import { ALL_METRICS, PERIOD_OPTIONS, calcTotals } from '@/lib/metrics-config';
 import { useAdAccount } from '@/lib/AdAccountContext';
+import { useMetricsStore } from '@/lib/useMetricsStore';
 import { useRealCampaigns } from '@/lib/useRealCampaigns';
 import { FiArrowUp, FiArrowDown, FiRefreshCw, FiWifi } from 'react-icons/fi';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
@@ -40,11 +42,13 @@ function generateChartData(accountId: string) {
 
 export default function DashboardPage() {
   const { selectedAccount } = useAdAccount();
-  const [selectedMetrics, setSelectedMetrics] = useState<string[]>(DEFAULT_DASHBOARD_METRICS);
-  const [selectedPeriod, setSelectedPeriod] = useState('last_30d');
+  const { selectedPeriod, customDateRange, selectedMetrics, setSelectedMetrics } = useMetricsStore();
   
-  // Pass selectedPeriod to hook so it refetches when period changes
-  const { campaigns: realCampaigns, loading, isRealData, refetch } = useRealCampaigns(selectedPeriod);
+  // Pass selectedPeriod + customRange to hook so it refetches when period changes
+  const { campaigns: realCampaigns, loading, isRealData, refetch } = useRealCampaigns(
+    selectedPeriod,
+    selectedPeriod === 'custom' ? customDateRange : null
+  );
 
   // Use real campaigns if available, otherwise mock
   const accountCampaigns = useMemo(() => {
@@ -91,15 +95,23 @@ export default function DashboardPage() {
     [selectedAccount]
   );
 
-  // Simulated change percentages for KPIs
+  const periodLabel = PERIOD_OPTIONS.find(p => p.key === selectedPeriod)?.label
+    || (selectedPeriod === 'custom' && customDateRange ? `${customDateRange.since} a ${customDateRange.until}` : '30 dias');
+
   const mockChanges: Record<string, { value: string; positive: boolean }> = {
     spend: { value: '+12.5%', positive: true },
     budget: { value: '+5.0%', positive: true },
     impressions: { value: '+8.3%', positive: true },
+    reach: { value: '+6.1%', positive: true },
+    frequency: { value: '-2.1%', positive: true },
     clicks: { value: '+15.1%', positive: true },
     ctr: { value: '+0.4%', positive: true },
     cpc: { value: '-8.2%', positive: true },
+    cpm: { value: '-5.3%', positive: true },
     conversions: { value: '+22.3%', positive: true },
+    leads: { value: '+18.7%', positive: true },
+    cpl: { value: '-12.4%', positive: true },
+    costPerResult: { value: '-10.0%', positive: true },
     roas: { value: '+0.8x', positive: true },
   };
 
@@ -151,18 +163,8 @@ export default function DashboardPage() {
           display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap',
           gap: 'var(--space-sm)', marginBottom: 'var(--space-lg)',
         }}>
-          {/* Period selector */}
-          <div style={{ display: 'flex', gap: 'var(--space-xs)', flexWrap: 'wrap' }}>
-            {PERIOD_OPTIONS.filter(p => p.key !== 'custom').map(p => (
-              <button
-                key={p.key}
-                className={`btn btn-sm ${selectedPeriod === p.key ? 'btn-primary' : 'btn-secondary'}`}
-                onClick={() => setSelectedPeriod(p.key)}
-              >
-                {p.label.replace('Últimos ', '')}
-              </button>
-            ))}
-          </div>
+          {/* Period selector — global */}
+          <PeriodSelector />
           <MetricsConfigPanel
             selectedMetrics={selectedMetrics}
             onMetricsChange={setSelectedMetrics}
@@ -199,7 +201,7 @@ export default function DashboardPage() {
             <div className="chart-card-header">
               <div>
                 <h3 className="chart-card-title">Gastos por Plataforma</h3>
-                <p className="text-sm text-secondary">{PERIOD_OPTIONS.find(p => p.key === selectedPeriod)?.label}</p>
+                <p className="text-sm text-secondary">{periodLabel}</p>
               </div>
             </div>
             <ResponsiveContainer width="100%" height={220}>
@@ -228,7 +230,7 @@ export default function DashboardPage() {
             <div className="chart-card-header">
               <div>
                 <h3 className="chart-card-title">Cliques Diários</h3>
-                <p className="text-sm text-secondary">{PERIOD_OPTIONS.find(p => p.key === selectedPeriod)?.label}</p>
+                <p className="text-sm text-secondary">{periodLabel}</p>
               </div>
             </div>
             <ResponsiveContainer width="100%" height={220}>

@@ -2,9 +2,9 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import Header from '@/components/layout/Header';
-import { mockCampaigns } from '@/lib/mock-data';
-import { useAdAccount } from '@/lib/AdAccountContext';
-import { FiSend, FiMic, FiMicOff, FiZap, FiAlertCircle, FiCheck } from 'react-icons/fi';
+import { useClient } from '@/lib/ClientContext';
+import { useClientCampaigns } from '@/lib/useClientCampaigns';
+import { FiSend, FiMic, FiMicOff, FiZap, FiAlertCircle, FiCheck, FiX, FiLoader } from 'react-icons/fi';
 
 interface Message {
   id: string;
@@ -22,6 +22,9 @@ interface ChatAction {
   platform?: string;
   params?: any;
   executed?: boolean;
+  executing?: boolean;
+  error?: string;
+  clientAccountId?: string;
 }
 
 // Simple markdown-like rendering
@@ -137,13 +140,14 @@ function parseBold(text: string) {
 }
 
 export default function ChatPage() {
-  const { selectedAccount } = useAdAccount();
+  const { selectedClient } = useClient();
+  const { campaigns, loading: campaignsLoading } = useClientCampaigns();
 
   const [messages, setMessages] = useState<Message[]>([
     {
       id: 'welcome',
       role: 'assistant',
-      content: `👋 **Olá! Sou o AdPilot AI**, seu gestor de tráfego inteligente!\n\nPosso te ajudar com:\n\n🎯 **Gerenciar Campanhas** — pausar, ativar, criar, duplicar\n💰 **Ajustar Orçamentos** — otimizar alocação de verba\n📊 **Analisar Performance** — insights e métricas detalhadas\n✍️ **Gerar Copies** — textos para Meta e Google Ads\n🎨 **Ideias de Criativos** — ângulos e conceitos visuais\n\n🎙️ Você também pode usar o **microfone** para falar comigo por voz!\n\n**Como posso te ajudar?** 🚀`,
+      content: `👋 **Olá! Sou o AdPilot AI**, seu gestor de tráfego inteligente!\n\nPosso te ajudar com:\n\n🎯 **Gerenciar Campanhas** — pausar, ativar, ajustar orçamento\n📊 **Analisar Performance** — insights e métricas detalhadas\n💰 **Ajustar Orçamentos** — otimizar alocação de verba\n✍️ **Gerar Copies** — textos para Google e Meta Ads\n\n🎙️ Use o **microfone** para comandos por voz!\n\n**Selecione um cliente no menu lateral e me diga como posso ajudar!** 🚀`,
       timestamp: new Date(),
     },
   ]);
@@ -155,11 +159,6 @@ export default function ChatPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<any>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-
-  // Get campaigns for current account
-  const accountCampaigns = selectedAccount
-    ? mockCampaigns.filter(c => c.accountId === selectedAccount.id)
-    : mockCampaigns;
 
   // Auto scroll to bottom
   useEffect(() => {
@@ -253,6 +252,18 @@ export default function ChatPage() {
     setIsLoading(true);
 
     try {
+      // Build client context with real data
+      const clientContext = selectedClient ? {
+        id: selectedClient.id,
+        name: selectedClient.name,
+        accounts: selectedClient.accounts.map(a => ({
+          id: a.id,
+          platform: a.platform,
+          accountName: a.accountName,
+          accountId: a.accountId,
+        })),
+      } : null;
+
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -261,13 +272,8 @@ export default function ChatPage() {
             role: m.role,
             content: m.content,
           })),
-          campaignsContext: accountCampaigns,
-          accountContext: selectedAccount ? {
-            id: selectedAccount.id,
-            name: selectedAccount.name,
-            platform: selectedAccount.platform,
-            businessName: selectedAccount.businessName,
-          } : null,
+          campaignsContext: campaigns,
+          clientContext,
         }),
       });
 
@@ -295,12 +301,76 @@ export default function ChatPage() {
     inputRef.current?.focus();
   };
 
-  const executeAction = (messageId: string, actionIdx: number) => {
-    setMessages(prev => prev.map(msg => {
-      if (msg.id !== messageId || !msg.actions) return msg;
-      const actions = [...msg.actions];
-      actions[actionIdx] = { ...actions[actionIdx], executed: true };
-      return { ...msg, actions };
+  const executeAction = async (messageId: string, actionIdx: number) => {
+    // Get the action details
+    const msg = messages.find(m => m.id === messageId);
+    if (!msg?.actions?.[actionIdx]) return;
+    const action = msg.actions[actionIdx];
+
+    // Mark as executing
+    setMessages(prev => prev.map(m => {
+      if (m.id !== messageId || !m.actions) return m;
+      const actions = [...m.actions];
+      actions[actionIdx] = { ...actions[actionIdx], executing: true };
+      return { ...m, actions };
+    }));
+
+    try {
+      // Find the clientAccountId for this action
+      const account = selectedClient?.accounts.find(
+        a => a.platform === action.platform
+      );
+
+      const res = await fetch('/api/chat/execute', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          clientAccountId: action.clientAccountId || account?.id,
+          action,
+        }),
+      });
+
+      const result = await res.json();
+
+      // Mark as executed with result
+      setMessages(prev => prev.map(m => {
+        if (m.id !== messageId || !m.actions) return m;
+        const actions = [...m.actions];
+        actions[actionIdx] = {
+          ...actions[actionIdx],
+          executed: true,
+          executing: false,
+          error: result.success ? undefined : result.error,
+        };
+        return { ...m, actions };
+      }));
+
+      // Add result message from assistant
+      setMessages(prev => [...prev, {
+        id: Date.now().toString(),
+        role: 'assistant',
+        content: result.message || (result.success ? '✅ Ação executada!' : '❌ Falha na execução.'),
+        timestamp: new Date(),
+      }]);
+    } catch (e: any) {
+      setMessages(prev => prev.map(m => {
+        if (m.id !== messageId || !m.actions) return m;
+        const actions = [...m.actions];
+        actions[actionIdx] = {
+          ...actions[actionIdx],
+          executing: false,
+          error: 'Erro de conexão',
+        };
+        return { ...m, actions };
+      }));
+    }
+  };
+
+  const cancelAction = (messageId: string, actionIdx: number) => {
+    setMessages(prev => prev.map(m => {
+      if (m.id !== messageId || !m.actions) return m;
+      const actions = m.actions.filter((_, i) => i !== actionIdx);
+      return { ...m, actions };
     }));
   };
 
@@ -322,14 +392,22 @@ export default function ChatPage() {
     <>
       <Header title="Chat IA" subtitle="Seu gestor de tráfego inteligente" />
       <div className="chat-container">
-        {/* Account badge */}
-        {selectedAccount && (
+        {/* Client badge */}
+        {selectedClient && (
           <div className="chat-account-badge">
-            <span className={`badge ${selectedAccount.platform === 'meta' ? 'badge-meta' : 'badge-google'}`} style={{ fontSize: 10, padding: '1px 6px' }}>
-              {selectedAccount.platform === 'meta' ? 'Meta' : 'Google'}
+            <div style={{
+              width: 20, height: 20, borderRadius: 4,
+              background: selectedClient.avatarColor || '#6366f1',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              color: '#fff', fontSize: 10, fontWeight: 700, flexShrink: 0,
+            }}>
+              {selectedClient.name.charAt(0).toUpperCase()}
+            </div>
+            <span>Cliente: <strong>{selectedClient.name}</strong></span>
+            <span style={{ color: 'var(--text-tertiary)' }}>
+              • {campaigns.length} campanha{campaigns.length !== 1 ? 's' : ''}
+              {campaignsLoading && ' (carregando...)'}
             </span>
-            <span>Analisando: <strong>{selectedAccount.name}</strong></span>
-            <span style={{ color: 'var(--text-tertiary)' }}>• {accountCampaigns.length} campanhas</span>
           </div>
         )}
 
@@ -368,13 +446,37 @@ export default function ChatPage() {
                             {action.platform === 'meta' ? 'Meta' : 'Google'}
                           </span>
                         </div>
-                        <button
-                          className={`btn btn-sm ${action.executed ? 'btn-success' : 'btn-primary'}`}
-                          onClick={() => executeAction(msg.id, idx)}
-                          disabled={action.executed}
-                        >
-                          {action.executed ? <><FiCheck size={12} /> Executado</> : 'Executar'}
-                        </button>
+                        <div style={{ display: 'flex', gap: 6 }}>
+                          {action.executed ? (
+                            <button className="btn btn-sm btn-success" disabled>
+                              <FiCheck size={12} /> Executado
+                            </button>
+                          ) : action.executing ? (
+                            <button className="btn btn-sm btn-primary" disabled>
+                              <FiLoader size={12} className="spin" /> Executando...
+                            </button>
+                          ) : (
+                            <>
+                              <button
+                                className="btn btn-sm btn-primary"
+                                onClick={() => executeAction(msg.id, idx)}
+                              >
+                                <FiCheck size={12} /> Confirmar
+                              </button>
+                              <button
+                                className="btn btn-sm btn-secondary"
+                                onClick={() => cancelAction(msg.id, idx)}
+                              >
+                                <FiX size={12} /> Cancelar
+                              </button>
+                            </>
+                          )}
+                          {action.error && (
+                            <span style={{ color: 'var(--danger)', fontSize: 11, alignSelf: 'center' }}>
+                              {action.error}
+                            </span>
+                          )}
+                        </div>
                       </div>
                     ))}
                   </div>

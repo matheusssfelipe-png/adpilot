@@ -2,12 +2,21 @@ import { NextRequest, NextResponse } from 'next/server';
 
 export async function POST(request: NextRequest) {
   try {
-    const { campaignId, status, token } = await request.json();
+    const { campaignId, status } = await request.json();
+    const token = request.cookies.get('meta_access_token')?.value
+      || request.headers.get('authorization')?.replace('Bearer ', '');
 
-    if (!campaignId || !status || !token) {
+    if (!campaignId || !status) {
       return NextResponse.json(
-        { error: 'campaignId, status and token are required' },
+        { error: 'campaignId and status are required' },
         { status: 400 }
+      );
+    }
+
+    if (!token) {
+      return NextResponse.json(
+        { error: 'Not authenticated with Meta' },
+        { status: 401 }
       );
     }
 

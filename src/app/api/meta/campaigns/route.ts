@@ -3,19 +3,35 @@ import { NextRequest, NextResponse } from 'next/server';
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const accountId = searchParams.get('accountId');
-  const token = searchParams.get('token');
   const datePreset = searchParams.get('datePreset') || 'last_30d';
+  const since = searchParams.get('since');
+  const until = searchParams.get('until');
 
-  if (!accountId || !token) {
+  // Token from cookie (secure) or Authorization header as fallback
+  const token = request.cookies.get('meta_access_token')?.value
+    || request.headers.get('authorization')?.replace('Bearer ', '');
+
+  if (!accountId) {
     return NextResponse.json(
-      { error: 'accountId and token are required' },
+      { error: 'accountId is required' },
       { status: 400 }
     );
   }
 
+  if (!token) {
+    return NextResponse.json(
+      { error: 'Not authenticated with Meta' },
+      { status: 401 }
+    );
+  }
+
   try {
-    // Fetch campaigns with insights for this ad account
-    const campaignsUrl = `https://graph.facebook.com/v21.0/${accountId}/campaigns?fields=id,name,status,objective,daily_budget,lifetime_budget,start_time,stop_time,insights.date_preset(${datePreset}){spend,impressions,clicks,cpc,ctr,conversions,actions,cost_per_action_type}&limit=100&access_token=${token}`;
+    // Build insights parameter — use time_range for custom dates, date_preset for presets
+    const insightsParam = since && until
+      ? `insights.time_range({"since":"${since}","until":"${until}"})`
+      : `insights.date_preset(${datePreset})`;
+
+    const campaignsUrl = `https://graph.facebook.com/v21.0/${accountId}/campaigns?fields=id,name,status,objective,daily_budget,lifetime_budget,start_time,stop_time,${insightsParam}{spend,impressions,clicks,cpc,ctr,conversions,actions,action_values,cost_per_action_type,purchase_roas}&limit=100&access_token=${token}`;
     
     const res = await fetch(campaignsUrl);
     const data = await res.json();
@@ -53,7 +69,17 @@ export async function GET(request: NextRequest) {
         leads = leadAction ? parseInt(leadAction.value || '0') : 0;
       }
 
-      const roas = spend > 0 && conversions > 0 ? (conversions * 50) / spend : 0; // Rough estimate
+      // Use purchase_roas from API if available, otherwise calculate from action_values
+      let roas = 0;
+      if (insights.purchase_roas) {
+        const roasEntry = insights.purchase_roas.find((r: any) => r.action_type === 'omni_purchase');
+        roas = roasEntry ? parseFloat(roasEntry.value || '0') : 0;
+      } else if (insights.action_values) {
+        const purchaseValue = insights.action_values.find(
+          (a: any) => a.action_type === 'purchase' || a.action_type === 'offsite_conversion.fb_pixel_purchase'
+        );
+        roas = purchaseValue && spend > 0 ? parseFloat(purchaseValue.value || '0') / spend : 0;
+      }
       const cpl = leads > 0 ? spend / leads : 0;
 
       return {

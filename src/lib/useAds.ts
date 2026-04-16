@@ -1,54 +1,42 @@
-import { useState, useCallback, useEffect } from 'react';
+'use client';
 
-export interface RealAd {
-  id: string;
-  name: string;
-  status: string;
-  adsetId: string;
-  spend: number;
-  impressions: number;
-  clicks: number;
-  ctr: number;
-  cpc: number;
-  conversions: number;
-  leads: number;
-  cpl: number;
-  roas: number;
-}
+import { useState, useEffect, useCallback } from 'react';
+import { useAdAccount } from './AdAccountContext';
 
-export function useAds(adSetId: string | null, datePreset: string = 'last_30d') {
-  const [ads, setAds] = useState<RealAd[]>([]);
+export function useAds(adSetId: string | null, datePreset: string = 'last_30d', customRange?: { since: string; until: string } | null) {
+  const { metaConnected } = useAdAccount();
+  const [ads, setAds] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   const fetchAds = useCallback(async () => {
-    if (!adSetId) return;
-
-    const token = localStorage.getItem('meta_access_token');
-    if (!token) return;
-
+    if (!adSetId || !metaConnected) { setAds([]); return; }
     setLoading(true);
-    setError(null);
     try {
-      const res = await fetch(`/api/meta/ads?adsetId=${adSetId}&token=${token}&datePreset=${datePreset}`);
+      const params = new URLSearchParams({ adsetId: adSetId });
+      if (datePreset === 'custom' && customRange?.since && customRange?.until) {
+        params.set('since', customRange.since);
+        params.set('until', customRange.until);
+      } else {
+        params.set('datePreset', datePreset);
+      }
+
+      const res = await fetch(`/api/meta/ads?${params.toString()}`);
       const data = await res.json();
-      
       if (data.success && data.ads) {
         setAds(data.ads);
       } else {
-        setError(data.error || 'Failed to load ads');
+        setAds([]);
       }
-    } catch (err: any) {
-      console.error('Error fetching ads:', err);
-      setError(err.message || 'Unknown error');
+    } catch {
+      setAds([]);
     } finally {
       setLoading(false);
     }
-  }, [adSetId, datePreset]);
+  }, [adSetId, datePreset, customRange?.since, customRange?.until, metaConnected]);
 
   useEffect(() => {
     fetchAds();
   }, [fetchAds]);
 
-  return { ads, loading, error, refetch: fetchAds };
+  return { ads, loading, refetch: fetchAds };
 }

@@ -2,83 +2,16 @@
 
 import { useState, useMemo, useEffect } from 'react';
 import Header from '@/components/layout/Header';
+import PeriodSelector from '@/components/PeriodSelector';
 import { mockCampaigns, Campaign } from '@/lib/mock-data';
+import { ALL_METRICS, PERIOD_OPTIONS, calcTotals } from '@/lib/metrics-config';
+import { useAdAccount } from '@/lib/AdAccountContext';
+import { useMetricsStore } from '@/lib/useMetricsStore';
+import { useRealCampaigns } from '@/lib/useRealCampaigns';
 import {
   FiFileText, FiDownload, FiSend, FiCalendar, FiEye,
   FiChevronUp, FiChevronDown, FiCheck, FiX, FiSettings,
-  FiDollarSign, FiMousePointer, FiPercent, FiTrendingUp,
-  FiShoppingCart, FiEyeOff, FiTarget, FiArrowUp, FiArrowDown
 } from 'react-icons/fi';
-
-// All available metrics
-interface MetricConfig {
-  key: string;
-  label: string;
-  shortLabel: string;
-  icon: any;
-  color: string;
-  format: (value: number) => string;
-  getValue: (c: Campaign) => number;
-}
-
-const ALL_METRICS: MetricConfig[] = [
-  {
-    key: 'spend', label: 'Gasto', shortLabel: 'Gasto',
-    icon: FiDollarSign, color: '#6366f1',
-    format: (v) => `R$ ${v.toLocaleString('pt-BR')}`,
-    getValue: (c) => c.spend,
-  },
-  {
-    key: 'budget', label: 'Orçamento', shortLabel: 'Budget',
-    icon: FiTarget, color: '#8b5cf6',
-    format: (v) => `R$ ${v.toLocaleString('pt-BR')}`,
-    getValue: (c) => c.budget,
-  },
-  {
-    key: 'impressions', label: 'Impressões', shortLabel: 'Impr.',
-    icon: FiEye, color: '#3b82f6',
-    format: (v) => v >= 1000 ? `${(v / 1000).toFixed(1)}K` : v.toString(),
-    getValue: (c) => c.impressions,
-  },
-  {
-    key: 'clicks', label: 'Cliques', shortLabel: 'Cliques',
-    icon: FiMousePointer, color: '#06b6d4',
-    format: (v) => v >= 1000 ? `${(v / 1000).toFixed(1)}K` : v.toString(),
-    getValue: (c) => c.clicks,
-  },
-  {
-    key: 'ctr', label: 'CTR (%)', shortLabel: 'CTR',
-    icon: FiPercent, color: '#22c55e',
-    format: (v) => `${v.toFixed(2)}%`,
-    getValue: (c) => c.ctr,
-  },
-  {
-    key: 'cpc', label: 'CPC', shortLabel: 'CPC',
-    icon: FiDollarSign, color: '#f59e0b',
-    format: (v) => `R$ ${v.toFixed(2)}`,
-    getValue: (c) => c.cpc,
-  },
-  {
-    key: 'conversions', label: 'Conversões', shortLabel: 'Conv.',
-    icon: FiShoppingCart, color: '#ef4444',
-    format: (v) => v.toLocaleString('pt-BR'),
-    getValue: (c) => c.conversions,
-  },
-  {
-    key: 'roas', label: 'ROAS', shortLabel: 'ROAS',
-    icon: FiTrendingUp, color: '#10b981',
-    format: (v) => v > 0 ? `${v.toFixed(1)}x` : '—',
-    getValue: (c) => c.roas,
-  },
-];
-
-const PERIOD_OPTIONS = [
-  { key: '7d', label: 'Últimos 7 dias' },
-  { key: '14d', label: 'Últimos 14 dias' },
-  { key: '30d', label: 'Últimos 30 dias' },
-  { key: '90d', label: 'Últimos 90 dias' },
-  { key: 'custom', label: 'Personalizado' },
-];
 
 interface SavedReport {
   id: string;
@@ -102,25 +35,26 @@ const mockSavedReports: SavedReport[] = [
   },
 ];
 
-import { useAdAccount } from '@/lib/AdAccountContext';
-import { useRealCampaigns } from '@/lib/useRealCampaigns';
-
-// ... other code ...
-
 export default function ReportsPage() {
   const { selectedAccount } = useAdAccount();
-  
+  const { selectedPeriod, customDateRange, selectedMetrics, setSelectedMetrics } = useMetricsStore();
+  const customRange = selectedPeriod === 'custom' ? customDateRange : null;
+
   // Report config state
   const [showCreate, setShowCreate] = useState(false);
   const [reportName, setReportName] = useState('');
-  const [selectedPeriod, setSelectedPeriod] = useState('last_30d');
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
-  const [selectedMetrics, setSelectedMetrics] = useState<string[]>(
-    ['spend', 'impressions', 'clicks', 'ctr', 'conversions', 'roas']
-  );
 
-  const { campaigns: realCampaigns, loading, isRealData, refetch } = useRealCampaigns(selectedPeriod);
+  // Report-specific metrics (start from global but can be customized per-report)
+  const [reportMetrics, setReportMetrics] = useState<string[]>(selectedMetrics);
+
+  // Sync report metrics when global changes (if report builder is closed)
+  useEffect(() => {
+    if (!showCreate) {
+      setReportMetrics(selectedMetrics);
+    }
+  }, [selectedMetrics, showCreate]);
+
+  const { campaigns: realCampaigns, loading, isRealData, refetch } = useRealCampaigns(selectedPeriod, customRange);
 
   // Build unified campaign list
   const accountCampaigns = useMemo(() => {
@@ -149,10 +83,10 @@ export default function ReportsPage() {
   const [generating, setGenerating] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
 
-  // Active metrics config
+  // Active metrics config for report
   const activeMetrics = useMemo(
-    () => selectedMetrics.map(key => ALL_METRICS.find(m => m.key === key)!).filter(Boolean),
-    [selectedMetrics]
+    () => reportMetrics.map(key => ALL_METRICS.find(m => m.key === key)!).filter(Boolean),
+    [reportMetrics]
   );
 
   const filteredCampaigns = useMemo(
@@ -160,16 +94,16 @@ export default function ReportsPage() {
     [accountCampaigns, selectedCampaigns]
   );
 
-  // Metric toggle
+  // Metric toggle for report builder
   const toggleMetric = (key: string) => {
-    setSelectedMetrics(prev =>
+    setReportMetrics(prev =>
       prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]
     );
   };
 
   // Move metric up/down
   const moveMetric = (key: string, direction: 'up' | 'down') => {
-    setSelectedMetrics(prev => {
+    setReportMetrics(prev => {
       const idx = prev.indexOf(key);
       if (idx === -1) return prev;
       if (direction === 'up' && idx === 0) return prev;
@@ -188,14 +122,11 @@ export default function ReportsPage() {
     );
   };
 
-  const selectAllCampaigns = () => setSelectedCampaigns(mockCampaigns.map(c => c.id));
-  const selectNoneCampaigns = () => setSelectedCampaigns([]);
-
   // Totals
   const totals = useMemo(() => {
     const result: Record<string, number> = {};
     ALL_METRICS.forEach(m => {
-      if (['ctr', 'cpc', 'roas'].includes(m.key)) {
+      if (m.aggregate === 'avg') {
         const values = filteredCampaigns.map(c => m.getValue(c)).filter(v => v > 0);
         result[m.key] = values.length ? values.reduce((a, b) => a + b, 0) / values.length : 0;
       } else {
@@ -205,6 +136,10 @@ export default function ReportsPage() {
     return result;
   }, [filteredCampaigns]);
 
+  // Build period label
+  const periodLabel = PERIOD_OPTIONS.find(p => p.key === selectedPeriod)?.label
+    || (selectedPeriod === 'custom' && customDateRange ? `${customDateRange.since} a ${customDateRange.until}` : 'Período personalizado');
+
   // Generate
   const handleGenerate = async () => {
     setGenerating(true);
@@ -212,8 +147,8 @@ export default function ReportsPage() {
     const newReport: SavedReport = {
       id: `r${Date.now()}`,
       name: reportName || 'Novo Relatório',
-      period: selectedPeriod === 'custom' ? `${startDate} - ${endDate}` : PERIOD_OPTIONS.find(p => p.key === selectedPeriod)!.label,
-      metrics: [...selectedMetrics],
+      period: periodLabel,
+      metrics: [...reportMetrics],
       campaigns: [...selectedCampaigns],
       createdAt: new Date().toISOString().split('T')[0],
     };
@@ -249,43 +184,21 @@ export default function ReportsPage() {
               <input className="input" placeholder="Ex: Relatório Mensal - Cliente X" value={reportName} onChange={e => setReportName(e.target.value)} />
             </div>
 
-            {/* Period Selector */}
+            {/* Period Selector — uses global */}
             <div style={{ marginBottom: 'var(--space-lg)' }}>
               <label className="input-label" style={{ marginBottom: 8, display: 'block' }}>📅 Período</label>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-sm)' }}>
-                {PERIOD_OPTIONS.map(p => (
-                  <button
-                    key={p.key}
-                    className={`btn btn-sm ${selectedPeriod === p.key ? 'btn-primary' : 'btn-secondary'}`}
-                    onClick={() => setSelectedPeriod(p.key)}
-                  >
-                    {p.label}
-                  </button>
-                ))}
-              </div>
-              {selectedPeriod === 'custom' && (
-                <div className="grid-2" style={{ marginTop: 'var(--space-md)' }}>
-                  <div className="input-group">
-                    <label className="input-label">Início</label>
-                    <input className="input" type="date" value={startDate} onChange={e => setStartDate(e.target.value)} />
-                  </div>
-                  <div className="input-group">
-                    <label className="input-label">Fim</label>
-                    <input className="input" type="date" value={endDate} onChange={e => setEndDate(e.target.value)} />
-                  </div>
-                </div>
-              )}
+              <PeriodSelector />
             </div>
 
             {/* Metrics Selector */}
             <div style={{ marginBottom: 'var(--space-lg)' }}>
               <label className="input-label" style={{ marginBottom: 8, display: 'block' }}>
-                📈 Métricas ({selectedMetrics.length} selecionadas) — clique para ativar/desativar, use as setas para reordenar
+                📈 Métricas ({reportMetrics.length} selecionadas) — clique para ativar/desativar, use as setas para reordenar
               </label>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-xs)' }}>
                 {ALL_METRICS.map(metric => {
-                  const isActive = selectedMetrics.includes(metric.key);
-                  const order = selectedMetrics.indexOf(metric.key);
+                  const isActive = reportMetrics.includes(metric.key);
+                  const order = reportMetrics.indexOf(metric.key);
                   return (
                     <div
                       key={metric.key}
@@ -372,7 +285,7 @@ export default function ReportsPage() {
                 <FiEye /> Preview
               </button>
               <button className="btn btn-secondary" onClick={() => setShowCreate(false)}>Cancelar</button>
-              <button className="btn btn-primary btn-lg" onClick={handleGenerate} disabled={generating || selectedMetrics.length === 0}>
+              <button className="btn btn-primary btn-lg" onClick={handleGenerate} disabled={generating || reportMetrics.length === 0}>
                 {generating ? <><div className="spinner" /> Gerando...</> : <><FiDownload /> Gerar Relatório</>}
               </button>
             </div>
@@ -380,12 +293,12 @@ export default function ReportsPage() {
         )}
 
         {/* Report Preview */}
-        {showPreview && selectedMetrics.length > 0 && (
+        {showPreview && reportMetrics.length > 0 && (
           <div className="card" style={{ marginBottom: 'var(--space-xl)', padding: 'var(--space-lg)' }}>
             <div className="section-header">
               <div>
                 <h3 className="section-title">📋 Preview do Relatório</h3>
-                <p className="section-subtitle">{reportName || 'Relatório'} — {PERIOD_OPTIONS.find(p => p.key === selectedPeriod)?.label || 'Período personalizado'}</p>
+                <p className="section-subtitle">{reportName || 'Relatório'} — {periodLabel}</p>
               </div>
               <button className="btn btn-sm btn-secondary" onClick={() => setShowPreview(false)}><FiX size={14} /></button>
             </div>

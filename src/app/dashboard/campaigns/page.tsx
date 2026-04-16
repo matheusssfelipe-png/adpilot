@@ -2,8 +2,10 @@
 
 import { useState, useMemo, useEffect } from 'react';
 import Header from '@/components/layout/Header';
+import PeriodSelector from '@/components/PeriodSelector';
 import { mockCampaigns, Campaign, CampaignStatus, Platform } from '@/lib/mock-data';
 import { useAdAccount } from '@/lib/AdAccountContext';
+import { useMetricsStore } from '@/lib/useMetricsStore';
 import { useRealCampaigns } from '@/lib/useRealCampaigns';
 import { useAdSets } from '@/lib/useAdSets';
 import { useAds } from '@/lib/useAds';
@@ -29,15 +31,16 @@ const statusClass: Record<string, string> = {
 
 export default function CampaignsPage() {
   const { selectedAccount } = useAdAccount();
-  const [selectedPeriod, setSelectedPeriod] = useState('last_30d');
+  const { selectedPeriod, customDateRange } = useMetricsStore();
+  const customRange = selectedPeriod === 'custom' ? customDateRange : null;
   
   // View state
   const [selectedCampaign, setSelectedCampaign] = useState<{ id: string, name: string } | null>(null);
   const [selectedAdSet, setSelectedAdSet] = useState<{ id: string, name: string } | null>(null);
 
-  const { campaigns: realCampaigns, loading: campaignsLoading, isRealData, refetch: refetchCampaigns } = useRealCampaigns(selectedPeriod);
-  const { adSets: realAdSets, loading: adSetsLoading, refetch: refetchAdSets } = useAdSets(selectedCampaign?.id || null, selectedPeriod);
-  const { ads: realAds, loading: adsLoading, refetch: refetchAds } = useAds(selectedAdSet?.id || null, selectedPeriod);
+  const { campaigns: realCampaigns, loading: campaignsLoading, isRealData, refetch: refetchCampaigns } = useRealCampaigns(selectedPeriod, customRange);
+  const { adSets: realAdSets, loading: adSetsLoading, refetch: refetchAdSets } = useAdSets(selectedCampaign?.id || null, selectedPeriod, customRange);
+  const { ads: realAds, loading: adsLoading, refetch: refetchAds } = useAds(selectedAdSet?.id || null, selectedPeriod, customRange);
   
   // Build unified campaign list
   const allCampaigns = useMemo(() => {
@@ -78,7 +81,7 @@ export default function CampaignsPage() {
 
     const newStatus = campaignToToggle.status === 'ACTIVE' ? 'PAUSED' : 'ACTIVE';
 
-    // Optimistic UI update
+    // Optimistic UI update (only for campaign-level toggle)
     setCampaigns(prev => prev.map(c => {
       if (c.id !== id) return c;
       return { ...c, status: newStatus };
@@ -86,14 +89,12 @@ export default function CampaignsPage() {
 
     if (isRealData && platform === 'meta') {
       try {
-        const token = localStorage.getItem('meta_access_token');
         const res = await fetch('/api/meta/campaigns/status', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             campaignId: id,
             status: newStatus,
-            token,
           }),
         });
         
@@ -122,6 +123,11 @@ export default function CampaignsPage() {
     <>
       <Header title="Campanhas" subtitle="Gerencie todas as suas campanhas" />
       <div className="page-content">
+        {/* Period selector */}
+        <div style={{ marginBottom: 'var(--space-md)' }}>
+          <PeriodSelector />
+        </div>
+
         {/* Toolbar */}
         <div className="toolbar" style={{ flexWrap: 'wrap' }}>
           <div className="toolbar-search">
@@ -146,15 +152,6 @@ export default function CampaignsPage() {
             <option value="ACTIVE">Ativas</option>
             <option value="PAUSED">Pausadas</option>
             <option value="DRAFT">Rascunho</option>
-          </select>
-          
-          <select className="input" value={selectedPeriod} onChange={e => setSelectedPeriod(e.target.value)}>
-            <option value="today">Hoje</option>
-            <option value="yesterday">Ontem</option>
-            <option value="last_7d">Últimos 7 dias</option>
-            <option value="last_14d">Últimos 14 dias</option>
-            <option value="last_30d">Últimos 30 dias</option>
-            <option value="last_90d">Últimos 90 dias</option>
           </select>
 
           {isRealData && (
@@ -357,13 +354,31 @@ export default function CampaignsPage() {
           ))}
         </div>
 
-        {filtered.length === 0 && (
-          <div className="empty-state">
-            <div className="empty-state-icon">📭</div>
-            <p className="empty-state-text">Nenhuma campanha encontrada</p>
-            <p className="text-sm text-secondary">Tente ajustar os filtros ou crie uma nova campanha</p>
-          </div>
-        )}
+        {/* Empty state - considers drill-down level */}
+        {(() => {
+          const currentItems = selectedAdSet ? realAds : selectedCampaign ? realAdSets : filtered;
+          const currentLoading = selectedAdSet ? adsLoading : selectedCampaign ? adSetsLoading : campaignsLoading;
+          if (currentItems.length === 0 && !currentLoading) {
+            return (
+              <div className="empty-state">
+                <div className="empty-state-icon">📭</div>
+                <p className="empty-state-text">
+                  {selectedAdSet
+                    ? 'Nenhum anúncio encontrado neste conjunto'
+                    : selectedCampaign
+                    ? 'Nenhum conjunto de anúncios encontrado'
+                    : 'Nenhuma campanha encontrada'}
+                </p>
+                <p className="text-sm text-secondary">
+                  {selectedAdSet || selectedCampaign
+                    ? 'Volte para o nível anterior ou tente outro período'
+                    : 'Tente ajustar os filtros ou crie uma nova campanha'}
+                </p>
+              </div>
+            );
+          }
+          return null;
+        })()}
 
         {/* Create Campaign Modal */}
         {showCreateModal && (

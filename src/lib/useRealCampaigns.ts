@@ -24,7 +24,7 @@ export interface RealCampaign {
   stopDate?: string;
 }
 
-export function useRealCampaigns(datePreset: string = 'last_30d') {
+export function useRealCampaigns(datePreset: string = 'last_30d', customRange?: { since: string; until: string } | null) {
   const { selectedAccount, metaConnected } = useAdAccount();
   const [campaigns, setCampaigns] = useState<RealCampaign[]>([]);
   const [loading, setLoading] = useState(false);
@@ -34,16 +34,23 @@ export function useRealCampaigns(datePreset: string = 'last_30d') {
   const fetchCampaigns = useCallback(async () => {
     if (!selectedAccount) return;
 
-    const token = localStorage.getItem('meta_access_token');
-    
     // If connected to Meta and this is a real Meta account
-    if (metaConnected && token && selectedAccount.platform === 'meta' && !selectedAccount.id.startsWith('act_00')) {
+    if (metaConnected && selectedAccount.platform === 'meta' && !selectedAccount.id.startsWith('act_00')) {
       setLoading(true);
       setError(null);
       try {
-        const res = await fetch(`/api/meta/campaigns?accountId=${selectedAccount.id}&token=${token}&datePreset=${datePreset}`);
+        // Build query params — support custom date range
+        const params = new URLSearchParams({ accountId: selectedAccount.id });
+        if (datePreset === 'custom' && customRange?.since && customRange?.until) {
+          params.set('since', customRange.since);
+          params.set('until', customRange.until);
+        } else {
+          params.set('datePreset', datePreset);
+        }
+
+        const res = await fetch(`/api/meta/campaigns?${params.toString()}`);
         const data = await res.json();
-        
+
         if (data.success && data.campaigns) {
           setCampaigns(data.campaigns);
           setIsRealData(true);
@@ -52,7 +59,7 @@ export function useRealCampaigns(datePreset: string = 'last_30d') {
           setCampaigns([]);
           setIsRealData(false);
         }
-      } catch (e) {
+      } catch {
         setError('Falha na conexão com a API');
         setCampaigns([]);
         setIsRealData(false);
@@ -64,7 +71,7 @@ export function useRealCampaigns(datePreset: string = 'last_30d') {
       setCampaigns([]);
       setIsRealData(false);
     }
-  }, [selectedAccount, metaConnected, datePreset]);
+  }, [selectedAccount, metaConnected, datePreset, customRange?.since, customRange?.until]);
 
   useEffect(() => {
     fetchCampaigns();

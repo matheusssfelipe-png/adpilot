@@ -1,10 +1,14 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useMemo } from 'react';
 import Header from '@/components/layout/Header';
 import MetricsConfigPanel from '@/components/MetricsConfigPanel';
+import PeriodSelector from '@/components/PeriodSelector';
 import { mockCampaigns, mockChartData } from '@/lib/mock-data';
 import { ALL_METRICS, PERIOD_OPTIONS, calcTotals } from '@/lib/metrics-config';
+import { useAdAccount } from '@/lib/AdAccountContext';
+import { useMetricsStore } from '@/lib/useMetricsStore';
+import { useRealCampaigns } from '@/lib/useRealCampaigns';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar } from 'recharts';
 
 const platformData = [
@@ -47,18 +51,52 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 };
 
 export default function AnalyticsPage() {
-  const [period, setPeriod] = useState('30d');
-  const [selectedMetrics, setSelectedMetrics] = useState<string[]>(
-    ['spend', 'clicks', 'ctr', 'conversions', 'cpc', 'roas']
-  );
+  const { selectedAccount } = useAdAccount();
+  const { selectedPeriod, customDateRange, selectedMetrics, setSelectedMetrics } = useMetricsStore();
+  const customRange = selectedPeriod === 'custom' ? customDateRange : null;
+
+  // Connect to real data
+  const { campaigns: realCampaigns, isRealData } = useRealCampaigns(selectedPeriod, customRange);
+
+  // Use real campaigns if available, otherwise mock
+  const accountCampaigns = useMemo(() => {
+    if (isRealData && realCampaigns.length > 0) {
+      return realCampaigns.map(c => ({
+        id: c.id,
+        name: c.name,
+        status: c.status as any,
+        objective: c.objective,
+        platform: c.platform as 'meta' | 'google',
+        accountId: c.accountId,
+        budget: c.budget,
+        spend: c.spend,
+        impressions: c.impressions,
+        clicks: c.clicks,
+        ctr: c.ctr,
+        cpc: c.cpc,
+        conversions: c.conversions,
+        leads: c.leads || 0,
+        cpl: c.cpl || 0,
+        roas: c.roas,
+        startDate: c.startDate || new Date().toISOString(),
+        endDate: c.stopDate || new Date().toISOString(),
+      }));
+    }
+    return selectedAccount
+      ? mockCampaigns.filter(c => c.accountId === selectedAccount.id)
+      : mockCampaigns;
+  }, [selectedAccount, realCampaigns, isRealData]);
 
   const activeMetrics = useMemo(
     () => selectedMetrics.map(key => ALL_METRICS.find(m => m.key === key)!).filter(Boolean),
     [selectedMetrics]
   );
-  const totals = useMemo(() => calcTotals(mockCampaigns, ALL_METRICS), []);
+  const totals = useMemo(() => calcTotals(accountCampaigns, ALL_METRICS), [accountCampaigns]);
 
-  const rankedCampaigns = [...mockCampaigns].filter(c => c.roas > 0).sort((a, b) => b.roas - a.roas);
+  const rankedCampaigns = [...accountCampaigns].filter(c => c.roas > 0).sort((a, b) => b.roas - a.roas);
+
+  const periodLabel = PERIOD_OPTIONS.find(p => p.key === selectedPeriod)?.label
+    || (selectedPeriod === 'custom' && customDateRange ? `${customDateRange.since} a ${customDateRange.until}` : '30 dias');
 
   return (
     <>
@@ -69,14 +107,8 @@ export default function AnalyticsPage() {
           display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap',
           gap: 'var(--space-sm)', marginBottom: 'var(--space-lg)',
         }}>
-          {/* Period */}
-          <div className="tabs">
-            {PERIOD_OPTIONS.filter(p => p.key !== 'custom').map(p => (
-              <button key={p.key} className={`tab ${period === p.key ? 'active' : ''}`} onClick={() => setPeriod(p.key)}>
-                {p.label.replace('Últimos ', '')}
-              </button>
-            ))}
-          </div>
+          {/* Period — uses global store */}
+          <PeriodSelector />
           <MetricsConfigPanel selectedMetrics={selectedMetrics} onMetricsChange={setSelectedMetrics} />
         </div>
 
@@ -100,6 +132,7 @@ export default function AnalyticsPage() {
           <div className="chart-card">
             <div className="chart-card-header">
               <h3 className="chart-card-title">Impressões ao Longo do Tempo</h3>
+              <p className="text-sm text-secondary">{periodLabel}</p>
             </div>
             <ResponsiveContainer width="100%" height={220}>
               <AreaChart data={mockChartData}>
