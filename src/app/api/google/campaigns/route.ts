@@ -108,7 +108,7 @@ export async function GET(request: NextRequest) {
       data = await fetchCampaigns(accessToken, customerId, customerId, developerToken, query);
     }
 
-    // If 403, try WITHOUT login-customer-id header
+    // If 403, try without login-customer-id header
     if (data.error && data.error.code === 403) {
       console.log('Google Ads 403 with customerId, trying without login-customer-id...');
       data = await fetchCampaigns(accessToken, customerId, '', developerToken, query);
@@ -138,8 +138,17 @@ export async function GET(request: NextRequest) {
 
     if (data.error) {
       console.error('Google Ads campaigns error:', JSON.stringify(data.error));
+      
+      let errorMessage = data.error.message || 'Google Ads API error';
+      // Extract specific detail message if available (e.g. DEVELOPER_TOKEN_NOT_APPROVED)
+      const specificError = data.error.details?.[0]?.errors?.[0];
+      if (specificError) {
+        const errorType = Object.values(specificError.errorCode || {})[0] || '';
+        errorMessage = `[${errorType}] ${specificError.message}`;
+      }
+
       return NextResponse.json({
-        error: data.error.message || 'Google Ads API error',
+        error: errorMessage,
         code: data.error.code,
         details: data.error.details || null,
         debug: {
