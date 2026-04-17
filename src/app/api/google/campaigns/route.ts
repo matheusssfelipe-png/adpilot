@@ -99,15 +99,26 @@ export async function GET(request: NextRequest) {
       ORDER BY metrics.cost_micros DESC
     `;
 
-    // Try fetching with current token
+    // Try fetching with current token using MCC as login-customer-id
     let data = await fetchCampaigns(accessToken, customerId, mccId, developerToken, query);
 
-    // If token expired (401 or 403), try refreshing and retrying ONCE
-    if (data.error && (data.error.code === 401 || data.error.code === 403)) {
-      console.log(`Google Ads returned ${data.error.code}, attempting token refresh...`);
+    // If 403, try with customerId as login-customer-id (the account itself, not MCC)
+    if (data.error && data.error.code === 403 && mccId !== customerId) {
+      console.log(`Google Ads 403 with MCC ${mccId}, trying with customerId ${customerId} as login-customer-id...`);
+      data = await fetchCampaigns(accessToken, customerId, customerId, developerToken, query);
+    }
+
+    // If 403, try WITHOUT login-customer-id header
+    if (data.error && data.error.code === 403) {
+      console.log('Google Ads 403 with customerId, trying without login-customer-id...');
+      data = await fetchCampaigns(accessToken, customerId, '', developerToken, query);
+    }
+
+    // If 401 (actual auth error), try refreshing token
+    if (data.error && data.error.code === 401) {
+      console.log('Google Ads returned 401, attempting token refresh...');
       const refreshed = await refreshGoogleToken(account);
       if (refreshed) {
-        // Re-read the updated token from DB
         const [updatedAccount] = await db.select().from(clientAccounts)
           .where(eq(clientAccounts.id, clientAccountId));
         const newToken = updatedAccount?.accessToken ? await decrypt(updatedAccount.accessToken) : null;
@@ -116,22 +127,27 @@ export async function GET(request: NextRequest) {
         }
       }
 
-      // If still failing after refresh, return auth error
-      if (data.error && (data.error.code === 401 || data.error.code === 403)) {
-        console.error('Google Ads campaigns error after refresh:', data.error);
+      if (data.error && data.error.code === 401) {
         return NextResponse.json({
           error: 'Token expirado. Vincule a conta Google novamente.',
-          code: data.error.code,
+          code: 401,
           needsReauth: true,
         }, { status: 401 });
       }
     }
 
     if (data.error) {
-      console.error('Google Ads campaigns error:', data.error);
+      console.error('Google Ads campaigns error:', JSON.stringify(data.error));
       return NextResponse.json({
         error: data.error.message || 'Google Ads API error',
         code: data.error.code,
+        details: data.error.details || null,
+        debug: {
+          customerId,
+          mccId,
+          tokenPresent: !!accessToken,
+          tokenExpiresAt: account.tokenExpiresAt,
+        },
       }, { status: data.error.code || 500 });
     }
 
@@ -186,20 +202,26 @@ export async function GET(request: NextRequest) {
 async function fetchCampaigns(
   accessToken: string,
   customerId: string,
-  mccId: string,
+  loginCustomerId: string,
   developerToken: string,
   query: string
 ): Promise<any> {
+  const headers: Record<string, string> = {
+    'Authorization': `Bearer ${accessToken}`,
+    'developer-token': developerToken,
+    'Content-Type': 'application/json',
+  };
+
+  // Only include login-customer-id if provided
+  if (loginCustomerId) {
+    headers['login-customer-id'] = loginCustomerId;
+  }
+
   const response = await fetch(
     `${GOOGLE_ADS_API}/customers/${customerId}/googleAds:search`,
     {
       method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${accessToken}`,
-        'developer-token': developerToken,
-        'login-customer-id': mccId,
-        'Content-Type': 'application/json',
-      },
+      headers,
       body: JSON.stringify({ query }),
     }
   );
